@@ -97,3 +97,15 @@ def test_production_config_validation(monkeypatch):
 def test_cli_rejects_short_password(app):
     result = app.test_cli_runner().invoke(args=["create-user", "--username", "u", "--email", "u@x.ng", "--password", "short"])
     assert result.exit_code != 0 and "at least 8" in result.output
+
+
+def test_origin_with_port_needs_host_with_port(client, make_user):
+    """Nginx must forward Host with its port ($http_host): behind http://localhost:8080 the
+    browser sends Origin "localhost:8080", and "Host: localhost" ($host) would not match."""
+    make_user()
+    body = {"username": "planner", "password": "s3cret-pass"}
+    origin = {"Origin": "http://localhost:8080"}
+    dropped_port = client.post("/api/auth/login", json=body, headers={**origin, "Host": "localhost"})
+    assert dropped_port.status_code == 403
+    kept_port = client.post("/api/auth/login", json=body, headers={**origin, "Host": "localhost:8080"})
+    assert kept_port.status_code == 200

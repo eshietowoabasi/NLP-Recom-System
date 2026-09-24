@@ -9,6 +9,7 @@ The case study is the Department of Computer Science, Faculty of Computing,
 University of Uyo.
 
 - Developer guide (specification): [`docs/NLP_RS_Developer_Documentation.docx`](docs/NLP_RS_Developer_Documentation.docx)
+- **[Run a demo on your own computer](docs/LOCAL_DEMO.md)** (Docker Desktop, about 20 minutes the first time)
 - [API reference](docs/API.md) · [Database](docs/DATABASE.md) · [Deployment and operations](docs/DEPLOYMENT.md)
 - [Implementation decisions](docs/DECISIONS.md) (including the gaps listed in guide §21)
 - [Definition of Done status](docs/DEFINITION_OF_DONE.md) (spec §22)
