@@ -23,14 +23,14 @@ class Config:
 
     # Uploads (spec §7.2)
     UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", str(PROJECT_ROOT / "data" / "raw"))
-    MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
+    MAX_DOCUMENT_BYTES = 20 * 1024 * 1024  # spec v2 §9: MAX_CONTENT_LENGTH=20971520
     MAX_CONTENT_LENGTH = MAX_DOCUMENT_BYTES + 1024 * 1024  # allow form overhead
     MAX_DOCUMENTS_PER_SESSION = 50
     REPORT_FOLDER = os.environ.get("REPORT_FOLDER", str(PROJECT_ROOT / "reports"))
     INSTITUTION_NAME = os.environ.get(
         "INSTITUTION_NAME", "Department of Computer Science, Faculty of Computing, University of Uyo"
     )
-    ALLOWED_EXTENSIONS = {"pdf", "docx", "txt"}
+    ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "csv"}
 
     # Session cookie auth (see docs/DECISIONS.md, D2)
     SESSION_COOKIE_HTTPONLY = True
@@ -54,6 +54,9 @@ class Config:
     SPACY_MODEL = os.environ.get("SPACY_MODEL", "en_core_web_sm")
     EMBEDDING_BACKEND = os.environ.get("EMBEDDING_BACKEND", "sbert")  # sbert | hashing
     SBERT_MODEL = os.environ.get("SBERT_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    # Spec v2 §9 environment defaults for new sessions (Admins can override in the app).
+    DEFAULT_OVERLAP_THRESHOLD = float(os.environ["DEFAULT_OVERLAP_THRESHOLD"]) if os.environ.get("DEFAULT_OVERLAP_THRESHOLD") else None
+    DEFAULT_TOPIC_COUNT = int(os.environ["DEFAULT_TOPIC_COUNT"]) if os.environ.get("DEFAULT_TOPIC_COUNT") else None
     TFIDF_TOP_N = 25
     TFIDF_CORPUS_TOP_N = 50
 
@@ -61,6 +64,9 @@ class Config:
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     # A stage that has not reported for this long means the worker died (spec §15).
     STALE_RUN_MINUTES = int(os.environ.get("STALE_RUN_MINUTES", "30"))
+    # Spec v2 §11: a stuck pipeline run must not hang the demo. Soft limit -> run marked
+    # Failed with a clear message; the hard limit kills the task if it ignores that.
+    PIPELINE_SOFT_TIME_LIMIT = int(os.environ.get("PIPELINE_SOFT_TIME_LIMIT", "900"))
     CELERY = {
         "broker_url": REDIS_URL,
         "task_ignore_result": True,

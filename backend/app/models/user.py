@@ -21,7 +21,7 @@ class User(UserMixin, db.Model):
     username: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(sa.String(128))
     email: Mapped[str] = mapped_column(sa.String(255), unique=True, index=True)
-    role: Mapped[Role] = mapped_column(enum_column(Role, "user_role"), default=Role.VIEWER)
+    role: Mapped[Role] = mapped_column(enum_column(Role, "user_role"), default=Role.PLANNER)
     department_id: Mapped[int | None] = mapped_column(sa.Integer)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), default=utcnow)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, default=True)

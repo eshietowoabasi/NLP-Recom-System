@@ -9,6 +9,8 @@ import numpy as np
 
 from .metrics import roc_summary
 
+TARGET_AUC = 0.80  # spec v2 §5: SBERT overlap detection AUC-ROC > 0.80
+
 
 def load_pairs_csv(path) -> list[dict]:
     with open(path, newline="", encoding="utf-8-sig") as fh:
@@ -38,12 +40,14 @@ def evaluate_similarity(rows: list[dict], embedder, threshold: float) -> dict:
         warnings.append(f"The evaluation plan calls for 30 topic pairs; this file has {len(rows)}.")
     return {
         "pairs": len(rows),
+        "target_auc_roc": TARGET_AUC,
+        "meets_target": summary["auc_roc"] > TARGET_AUC,
         "embedding_backend": embedder.backend,
         "embedding_model": embedder.model_name,
         **summary,
         "per_pair": [
             {"pair_id": r.get("pair_id") or str(i), "similarity": round(float(s), 4), "expert_overlap": l,
-             "predicted_overlap": bool(s > threshold)}
+             "predicted_overlap": bool(s >= threshold)}
             for i, (r, s, l) in enumerate(zip(rows, similarities, labels), start=1)
         ],
         "warnings": warnings,

@@ -72,16 +72,11 @@ def test_roles_required_enforced_server_side(app, client, make_user, login):
 
     assert client.post("/probe/write").status_code == 401
 
-    make_user("viewer", role=Role.VIEWER)
-    login("viewer")
-    resp = client.post("/probe/write")
-    assert resp.status_code == 403 and resp.json["error"]["code"] == "FORBIDDEN"
-    client.post("/api/auth/logout")
-
     make_user("planner")
     login("planner")
     assert client.post("/probe/write").status_code == 200
-    assert client.get("/probe/admin").status_code == 403
+    resp = client.get("/probe/admin")
+    assert resp.status_code == 403 and resp.json["error"]["code"] == "FORBIDDEN"
     client.post("/api/auth/logout")
 
     make_user("admin", role=Role.ADMIN)

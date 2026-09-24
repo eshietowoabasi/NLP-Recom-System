@@ -11,35 +11,52 @@ const rec = {
   ner_score: 0.9,
   topic_score: 0.8,
   novelty_score: 0.7,
+  max_similarity: 0.83,
   overlap_status: 'Potential Duplicate',
   planner_decision: null,
   planner_notes: null,
-  evidence: { passages: [{ text: 'Deploy on Kubernetes.' }] },
+  evidence: { passages: [{ text: 'Deploy on Kubernetes.' }], core_matches: [{ text: 'CSC 305: Cloud basics' }] },
 }
 
-const factory = (props) => mount(RecommendationCard, { props: { rec, ...props }, global: { stubs: { RouterLink: RouterLinkStub } } })
+const factory = (props) =>
+  mount(RecommendationCard, { props: { rec, threshold: 0.8, ...props }, global: { stubs: { RouterLink: RouterLinkStub } } })
 
 describe('RecommendationCard', () => {
-  it('shows scores, statuses and evidence', () => {
+  it('shows score, overlap badge with similarity, breakdown and decision state', () => {
     const wrapper = factory()
     expect(wrapper.text()).toContain('Cloud Computing and Kubernetes')
     expect(wrapper.text()).toContain('0.83')
-    expect(wrapper.text()).toContain('Potential Duplicate')
+    const badge = wrapper.find('[data-test="overlap-badge"]')
+    expect(badge.text()).toContain('Flagged')
+    expect(badge.attributes('title')).toContain('0.83')
+    expect(wrapper.find('[data-test="score-breakdown"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Pending review')
-    expect(wrapper.text()).toContain('Deploy on Kubernetes.')
-    expect(wrapper.findAll('[role="progressbar"]')).toHaveLength(3)
+  })
+
+  it('keeps evidence collapsed until expanded', async () => {
+    const wrapper = factory()
+    expect(wrapper.find('[data-test="evidence-panel"]').exists()).toBe(false)
+    await wrapper.find('[data-test="toggle-evidence"]').trigger('click')
+    expect(wrapper.find('[data-test="evidence-panel"]').text()).toContain('Deploy on Kubernetes.')
   })
 
   it('hides decision controls from users who cannot review', () => {
     expect(factory({ canReview: false }).find('[data-test="accept"]').exists()).toBe(false)
   })
 
-  it('emits decisions with notes and asks for justification on duplicates', async () => {
+  it('offers single-click accept/reject only (no flag), with notes', async () => {
     const wrapper = factory({ canReview: true })
-    const textarea = wrapper.find('textarea')
-    expect(textarea.attributes('placeholder')).toContain('Justification required')
-    await textarea.setValue('Applied practice beyond the core')
+    expect(wrapper.find('[data-test="flag"]').exists()).toBe(false)
+    expect(wrapper.find('textarea').attributes('placeholder')).toContain('justification')
+    await wrapper.find('textarea').setValue('Applied practice beyond the core')
     await wrapper.find('[data-test="accept"]').trigger('click')
     expect(wrapper.emitted('decide')[0][0]).toMatchObject({ decision: 'Accepted', notes: 'Applied practice beyond the core' })
+  })
+
+  it('shows Undo after a decision, which resets it to pending', async () => {
+    const wrapper = factory({ canReview: true, rec: { ...rec, planner_decision: 'Rejected' } })
+    expect(wrapper.find('[data-test="accept"]').exists()).toBe(false)
+    await wrapper.find('[data-test="undo"]').trigger('click')
+    expect(wrapper.emitted('decide')[0][0]).toMatchObject({ decision: null })
   })
 })

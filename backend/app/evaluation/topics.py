@@ -15,6 +15,7 @@ from ..services.topics import model_topics, select_passages
 from .metrics import topic_diversity
 
 TOP_WORDS = 10
+TARGET_C_V = 0.50  # spec v2 §5: BERTopic coherence C_v > 0.50
 
 
 def _unigram_words(keywords, vocabulary, n=TOP_WORDS):
@@ -84,5 +85,7 @@ def evaluate_topics(documents: list[str], embedder=None, lda_passes: int = 10, s
         "lda": {"c_v": l_mean, "diversity": topic_diversity(lda_topics), "seconds": round(lda_seconds, 2),
                 "topics": [{"words": w, "c_v": c} for w, c in zip(lda_topics, l_per)]},
         "better_coherence": "bertopic" if b_mean >= l_mean else "lda",
+        "target_c_v": TARGET_C_V,
+        "meets_target": b_mean > TARGET_C_V,
         "warnings": warnings,
     }

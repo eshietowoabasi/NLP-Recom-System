@@ -126,6 +126,7 @@ def _build_candidates(topic_result, passages, sentence_entities) -> list[Candida
             document_ids=[c["document_id"] for c in topic["document_counts"]],
             source_category_counts=topic["source_category_counts"],
             keywords=[k["term"] for k in topic["keywords"]],
+            ctfidf_score=topic.get("ctfidf_score", 0.0),
             representative_passages=topic["representative_passages"],
             entity_mentions=mentions,
             entity_passages=in_passages,
@@ -178,7 +179,12 @@ def run_analysis(session_id: int) -> None:
         db.session.rollback()
         session = db.session.get(AnalysisSession, session_id)
         session.status = SessionStatus.FAILED
-        session.error_message = f"{type(exc).__name__}: {exc}"[:2000]
+        if type(exc).__name__ == "SoftTimeLimitExceeded":
+            minutes = current_app.config["PIPELINE_SOFT_TIME_LIMIT"] // 60
+            session.error_message = (f"The analysis exceeded the {minutes}-minute time limit. "
+                                     "Try fewer or smaller documents, then retry.")
+        else:
+            session.error_message = f"{type(exc).__name__}: {exc}"[:2000]
         record_audit("SESSION_RUN_FAILED", "AnalysisSession", session_id,
                      {"stage": session.progress_stage, "error": session.error_message[:500]},
                      user_id=session.user_id, commit=False)
@@ -247,7 +253,7 @@ def _run(session: AnalysisSession) -> None:
     topic_passages = [p for link in analysis_links for p in passages[link.doc_session_id]]
     topic_vectors = [passage_vectors[link.doc_session_id] for link in analysis_links]
     topic_vectors = np.vstack(topic_vectors) if topic_vectors else np.zeros((0, 1))
-    topic_result = model_topics(topic_passages, topic_vectors)
+    topic_result = model_topics(topic_passages, topic_vectors, session.parameter_config.get("topic_count"))
     warnings.extend(topic_result.warnings)
 
     # --- semantic overlap with the NUC core (spec §9)

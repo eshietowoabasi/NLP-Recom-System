@@ -5,7 +5,7 @@ sentences) and embedded. Each candidate's embedding is compared with every segme
 the maximum cosine similarity decides the overlap status and gives novelty:
 
     novelty = 1 - max_similarity
-    overlap_status = "Potential Duplicate" if max_similarity > threshold
+    overlap_status = "Potential Duplicate" if max_similarity >= threshold   (spec v2 §5)
 """
 import re
 from collections import OrderedDict
@@ -121,7 +121,7 @@ def detect_overlap(candidate_vectors: np.ndarray, index: CoreIndex, threshold: f
         results.append(OverlapResult(
             max_similarity=max_similarity,
             novelty=round(1.0 - max_similarity, 4),
-            status=OverlapStatus.POTENTIAL_DUPLICATE if max_similarity > threshold else OverlapStatus.NO_SIGNIFICANT_OVERLAP,
+            status=OverlapStatus.POTENTIAL_DUPLICATE if max_similarity >= threshold else OverlapStatus.NO_SIGNIFICANT_OVERLAP,
             matches=[
                 {"text": index.segments[i].text, "document_id": index.segments[i].document_id,
                  "similarity": round(float(row[i]), 4)}

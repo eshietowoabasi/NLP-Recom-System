@@ -83,7 +83,7 @@ def test_full_relationship_graph(db, graph):
     assert user.documents == [doc] and user.sessions == [session]
     assert session.document_links[0].document is doc
     assert link.nlp_results[0].embedding == [0.1, 0.2]
-    assert session.recommendations[0].curriculum_maps[0].course_code == "CSC 413"
+    assert session.recommendations[0].curriculum_map.course_code == "CSC 413"
     assert rec.to_dict()["planner_decision"] == "Accepted"
 
 

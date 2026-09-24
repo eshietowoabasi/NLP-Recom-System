@@ -11,6 +11,7 @@ def test_defaults_match_specification():
         "topic_weight": 0.35,
         "novelty_weight": 0.25,
         "max_recommendations": 20,
+        "topic_count": 10,
     }
     assert build_session_config() is not DEFAULT_SESSION_CONFIG
 

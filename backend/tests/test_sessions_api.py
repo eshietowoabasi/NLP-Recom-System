@@ -72,12 +72,10 @@ def test_invalid_bodies(client, planner, body):
     assert client.post("/api/sessions", json=body).status_code == 422
 
 
-def test_viewer_cannot_create(client, make_docs, make_user, login):
+def test_signed_out_cannot_create(client, make_docs):
     ids = make_docs(1)
     client.post("/api/auth/logout")
-    make_user("viewer", role=Role.VIEWER)
-    login("viewer")
-    assert create(client, ids).status_code == 403
+    assert create(client, ids).status_code == 401
 
 
 def test_list_get_delete(client, make_docs, db):

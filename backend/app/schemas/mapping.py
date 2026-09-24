@@ -4,17 +4,18 @@ import re
 from ..models import ALLOWED_CREDIT_UNITS
 from ..utils.errors import ValidationError
 
-# NUC-style course codes: "CSC 413", "CYB401", "SEN 312L".
-COURSE_CODE_RE = re.compile(r"^[A-Z]{2,4} ?\d{3}[A-Z]?$")
+# NUC-style course codes, optionally with an institution prefix (spec v2 §4):
+# "CSC 413", "CYB401", "SEN 312L", "UUY-CSC 411".
+COURSE_CODE_RE = re.compile(r"^(?:[A-Z]{2,5}-)?[A-Z]{2,4} \d{3}[A-Z]?$")
 MAX_OUTCOMES = 12
 MAX_PREREQUISITES = 8
 
 
 def normalise_course_code(value: str) -> str:
-    """'csc413' -> 'CSC 413' so the same course is never stored two ways."""
+    """'csc413' -> 'CSC 413', 'uuy-csc411' -> 'UUY-CSC 411', so one course is never stored two ways."""
     compact = re.sub(r"\s+", "", value or "").upper()
-    match = re.match(r"^([A-Z]{2,4})(\d{3}[A-Z]?)$", compact)
-    return f"{match.group(1)} {match.group(2)}" if match else (value or "").strip().upper()
+    match = re.match(r"^((?:[A-Z]{2,5}-)?)([A-Z]{2,4})(\d{3}[A-Z]?)$", compact)
+    return f"{match.group(1)}{match.group(2)} {match.group(3)}" if match else (value or "").strip().upper()
 
 
 def validate_mapping(payload) -> dict:
@@ -24,7 +25,7 @@ def validate_mapping(payload) -> dict:
 
     code = normalise_course_code(payload.get("course_code") if isinstance(payload.get("course_code"), str) else "")
     if not COURSE_CODE_RE.match(code):
-        errors["course_code"] = "Use a course code such as 'CSC 413'"
+        errors["course_code"] = "Use a course code such as 'CSC 413' or 'UUY-CSC 411'"
     data["course_code"] = code
 
     title = payload.get("course_title")

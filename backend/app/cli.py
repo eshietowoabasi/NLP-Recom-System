@@ -34,3 +34,31 @@ def register_cli(app):
 
         failed = fail_stale_runs(minutes or app.config["STALE_RUN_MINUTES"])
         click.echo(f"Marked {len(failed)} stale session(s) as failed" + (f": {failed}" if failed else ""))
+
+    @app.cli.command("seed-core")
+    @click.argument("path", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--title", help="Document title (default: file name).")
+    @click.option("--admin", "admin_username", help="Admin to record as uploader (default: first active Admin).")
+    def seed_core(path, title, admin_username):
+        """Load the NUC core curriculum (CSV course list, PDF, DOCX or TXT) as a NUC Core Reference."""
+        from pathlib import Path
+
+        from .models import SourceCategory
+        from .services.ingestion.library import add_document
+        from .utils.errors import ApiError
+
+        query = db.select(User).filter_by(role=Role.ADMIN, is_active=True).order_by(User.user_id)
+        if admin_username:
+            query = query.filter_by(username=admin_username)
+        admin = db.session.execute(query).scalars().first()
+        if admin is None:
+            raise click.ClickException("No active Admin found; create one with `flask create-user --role Admin`")
+        try:
+            document = add_document(Path(path).read_bytes(), Path(path).name, SourceCategory.NUC_CORE,
+                                    admin.user_id, title)
+        except ApiError as exc:
+            raise click.ClickException(exc.message)
+        if document.processing_status.value != "Parsed":
+            raise click.ClickException(f"Stored, but text extraction failed: {document.error_message}")
+        click.echo(f"Loaded '{document.title}' as NUC Core Reference (id={document.document_id}, "
+                   f"{document.word_count} words)")

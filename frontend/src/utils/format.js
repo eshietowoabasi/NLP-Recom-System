@@ -28,7 +28,6 @@ const STATUS_CLASSES = {
   Parsed: 'success',
   Accepted: 'success',
   Rejected: 'danger',
-  Flagged: 'warning',
   'Potential Duplicate': 'warning',
   'No Significant Overlap': 'success',
 }

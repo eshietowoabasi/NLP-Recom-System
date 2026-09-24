@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
-import ScoreBar from '../components/ScoreBar.vue'
+import OverlapBadge from '../components/OverlapBadge.vue'
+import ScoreBreakdown from '../components/ScoreBreakdown.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
@@ -71,7 +72,7 @@ onMounted(load)
       </form>
     </div>
     <div class="d-flex gap-1 mb-3">
-      <StatusBadge :status="rec.overlap_status" />
+      <OverlapBadge :status="rec.overlap_status" :similarity="rec.max_similarity" :threshold="session?.parameter_config?.similarity_threshold" />
       <StatusBadge :status="rec.planner_decision" />
     </div>
     <div class="row g-3">
@@ -105,19 +106,25 @@ onMounted(load)
       </div>
       <div class="col-lg-4">
         <div class="card card-body mb-3">
-          <div class="d-flex justify-content-between mb-2"><span>Composite score</span><strong class="fs-5">{{ score(rec.composite_score) }}</strong></div>
-          <ScoreBar label="NER skill demand" :value="rec.ner_score" />
-          <ScoreBar label="Topic relevance" :value="rec.topic_score" />
-          <ScoreBar label="Novelty vs NUC core" :value="rec.novelty_score" />
-          <div class="small text-body-secondary mt-1">Max similarity to core: {{ score(rec.max_similarity) }}</div>
+          <ScoreBreakdown
+            :ner="rec.ner_score"
+            :topic="rec.topic_score"
+            :novelty="rec.novelty_score"
+            :composite="rec.composite_score"
+            :weights="session?.parameter_config"
+          />
+          <div class="small text-body-secondary mt-2">Max similarity to the NUC core: {{ score(rec.max_similarity) }}</div>
         </div>
         <div v-if="canReview" class="card card-body mb-3">
           <h2 class="h6">Planner decision</h2>
           <textarea v-model="notes" class="form-control form-control-sm mb-2" rows="3" aria-label="Planner notes" placeholder="Notes / justification"></textarea>
-          <div class="btn-group btn-group-sm w-100">
+          <div v-if="!rec.planner_decision" class="btn-group btn-group-sm w-100">
             <button class="btn btn-outline-success" @click="decide('Accepted')">Accept</button>
             <button class="btn btn-outline-danger" @click="decide('Rejected')">Reject</button>
-            <button class="btn btn-outline-warning" @click="decide('Flagged')">Flag</button>
+          </div>
+          <div v-else class="d-flex justify-content-between align-items-center small">
+            <span>{{ rec.planner_decision }}</span>
+            <button class="btn btn-link btn-sm p-0" data-test="undo" @click="decide(null)">Undo</button>
           </div>
         </div>
         <div class="card card-body">
@@ -127,7 +134,7 @@ onMounted(load)
             <li v-if="!mappings.length" class="text-body-secondary">Not mapped to a course.</li>
           </ul>
           <RouterLink v-if="canReview && rec.planner_decision === 'Accepted'" :to="`/recommendations/${rec.rec_id}/map`" class="btn btn-sm btn-primary" data-test="map-link">
-            {{ mappings.length ? 'Edit mapping' : 'Map to a course' }}
+            {{ mappings.length ? 'Edit course mapping' : 'Map to a course' }}
           </RouterLink>
           <div v-else-if="canReview" class="small text-body-secondary">Accept the recommendation to map it to a course.</div>
         </div>

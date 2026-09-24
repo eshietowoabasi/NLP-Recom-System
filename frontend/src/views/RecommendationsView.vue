@@ -14,7 +14,7 @@ const error = ref(null)
 const busyId = ref(null)
 const canReview = computed(() => auth.canReview(session.value))
 const counts = computed(() => {
-  const c = { Accepted: 0, Rejected: 0, Flagged: 0, pending: 0 }
+  const c = { Accepted: 0, Rejected: 0, pending: 0 }
   recs.value.forEach((r) => (r.planner_decision ? c[r.planner_decision]++ : c.pending++))
   return c
 })
@@ -51,15 +51,15 @@ onMounted(load)
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h3 mb-0">Recommendations</h1>
     <div class="small text-body-secondary" data-test="decision-counts">
-      {{ counts.Accepted }} accepted · {{ counts.Rejected }} rejected · {{ counts.Flagged }} flagged · {{ counts.pending }} pending
+      {{ counts.Accepted }} accepted · {{ counts.Rejected }} rejected · {{ counts.pending }} pending
     </div>
   </div>
   <div class="row g-2 mb-3">
     <div class="col-sm-4 col-lg-3">
       <select v-model="filters.overlap_status" class="form-select form-select-sm" aria-label="Overlap status" @change="load">
         <option value="">All overlap statuses</option>
-        <option>No Significant Overlap</option>
-        <option>Potential Duplicate</option>
+        <option value="No Significant Overlap">Clear</option>
+        <option value="Potential Duplicate">Flagged (possible duplicate of NUC core)</option>
       </select>
     </div>
     <div class="col-sm-4 col-lg-3">
@@ -68,18 +68,24 @@ onMounted(load)
         <option value="pending">Pending review</option>
         <option>Accepted</option>
         <option>Rejected</option>
-        <option>Flagged</option>
       </select>
     </div>
   </div>
   <ErrorAlert :error="error" />
   <p class="small text-body-secondary">
-    Composite = 0.40 × NER + 0.35 × topic + 0.25 × novelty (session weights apply). Potential duplicates of the NUC 70% core are
-    listed after novel topics and need a justification to accept.
+    Ranked by composite score S = 0.40 × NER demand + 0.35 × BERTopic relevance + 0.25 × novelty (this session's weights apply).
+    Topics flagged as possible duplicates of the NUC 70% core need a justification to accept.
   </p>
   <div class="row g-3">
     <div v-for="rec in recs" :key="rec.rec_id" class="col-md-6 col-xl-4">
-      <RecommendationCard :rec="rec" :can-review="canReview" :busy="busyId === rec.rec_id" @decide="decide" />
+      <RecommendationCard
+        :rec="rec"
+        :can-review="canReview"
+        :busy="busyId === rec.rec_id"
+        :weights="session?.parameter_config"
+        :threshold="session?.parameter_config?.similarity_threshold"
+        @decide="decide"
+      />
     </div>
     <div v-if="!recs.length && !error" class="text-body-secondary small">No recommendations match these filters.</div>
   </div>

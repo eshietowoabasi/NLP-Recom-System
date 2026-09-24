@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
+import DocumentUploader from '../components/DocumentUploader.vue'
 import PaginationNav from '../components/PaginationNav.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../services/api'
@@ -12,10 +13,7 @@ const documents = ref([])
 const pagination = ref(null)
 const filters = reactive({ source_category: '', status: '', q: '', page: 1 })
 const error = ref(null)
-const notice = ref('')
 
-const upload = reactive({ file: null, title: '', source_category: 'Job Market Data', busy: false, error: null })
-const fileInput = ref(null)
 const preview = reactive({ id: null, text: '', view: 'clean' })
 
 const categories = () => SOURCE_CATEGORIES.filter((c) => c !== 'NUC Core Reference' || auth.isAdmin)
@@ -29,32 +27,6 @@ async function load(page = filters.page) {
     error.value = null
   } catch (e) {
     error.value = e
-  }
-}
-
-async function submitUpload() {
-  if (!upload.file) return
-  upload.busy = true
-  upload.error = null
-  notice.value = ''
-  const form = new FormData()
-  form.append('file', upload.file)
-  form.append('source_category', upload.source_category)
-  if (upload.title.trim()) form.append('title', upload.title.trim())
-  try {
-    const { document } = await api.upload('/documents', form)
-    notice.value =
-      document.processing_status === 'Parsed'
-        ? `Uploaded “${document.title}” (${document.word_count} words).`
-        : `Uploaded “${document.title}”, but text extraction failed: ${document.error_message}`
-    upload.file = null
-    upload.title = ''
-    if (fileInput.value) fileInput.value.value = ''
-    await load(1)
-  } catch (e) {
-    upload.error = e
-  } finally {
-    upload.busy = false
   }
 }
 
@@ -88,32 +60,10 @@ onMounted(() => load())
 
 <template>
   <h1 class="h3 mb-3">Document library</h1>
-  <form v-if="auth.canWrite" class="card card-body mb-4" data-test="upload-form" @submit.prevent="submitUpload">
-    <h2 class="h6">Upload a source document</h2>
-    <ErrorAlert :error="upload.error" />
-    <div v-if="notice" class="alert alert-success py-2" data-test="upload-notice">{{ notice }}</div>
-    <div class="row g-2 align-items-end">
-      <div class="col-md-4">
-        <label class="form-label small" for="file">File (PDF, DOCX or TXT, max 25 MB)</label>
-        <input id="file" ref="fileInput" class="form-control" type="file" accept=".pdf,.docx,.txt" required @change="upload.file = $event.target.files[0] || null" />
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small" for="category">Source category</label>
-        <select id="category" v-model="upload.source_category" class="form-select">
-          <option v-for="c in categories()" :key="c">{{ c }}</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small" for="title">Title (optional)</label>
-        <input id="title" v-model="upload.title" class="form-control" maxlength="255" placeholder="Defaults to file name" />
-      </div>
-      <div class="col-md-2">
-        <button class="btn btn-primary w-100" type="submit" :disabled="upload.busy || !upload.file">
-          {{ upload.busy ? 'Uploading…' : 'Upload' }}
-        </button>
-      </div>
-    </div>
-  </form>
+  <div v-if="auth.canWrite" class="card card-body mb-4" data-test="upload-form">
+    <h2 class="h6">Upload source documents</h2>
+    <DocumentUploader :categories="categories()" @uploaded="load(1)" />
+  </div>
 
   <div class="row g-2 mb-2">
     <div class="col-md-4">

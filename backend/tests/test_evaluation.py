@@ -29,19 +29,19 @@ def test_prf():
 
 
 def test_span_matching_modes():
-    gold = [{"start": 0, "end": 10, "label": "SKILL"}, {"start": 20, "end": 25, "label": "TOOL"}]
-    pred = [{"start": 0, "end": 5, "label": "SKILL"}, {"start": 20, "end": 25, "label": "TOOL"}, {"start": 30, "end": 32, "label": "TOOL"}]
+    gold = [{"start": 0, "end": 10, "label": "SKILL"}, {"start": 20, "end": 25, "label": "TECHNOLOGY"}]
+    pred = [{"start": 0, "end": 5, "label": "SKILL"}, {"start": 20, "end": 25, "label": "TECHNOLOGY"}, {"start": 30, "end": 32, "label": "TECHNOLOGY"}]
     assert match_spans(gold, pred, "strict") == (1, 2, 1)
     assert match_spans(gold, pred, "lenient") == (2, 1, 0)
     # A gold span is matched at most once; label must agree.
-    assert match_spans([{"start": 0, "end": 5, "label": "TOOL"}], [{"start": 0, "end": 5, "label": "TOOL"}] * 2) == (1, 1, 0)
-    assert match_spans([{"start": 0, "end": 5, "label": "TOOL"}], [{"start": 0, "end": 5, "label": "SKILL"}]) == (0, 1, 1)
+    assert match_spans([{"start": 0, "end": 5, "label": "TECHNOLOGY"}], [{"start": 0, "end": 5, "label": "TECHNOLOGY"}] * 2) == (1, 1, 0)
+    assert match_spans([{"start": 0, "end": 5, "label": "TECHNOLOGY"}], [{"start": 0, "end": 5, "label": "SKILL"}]) == (0, 1, 1)
     with pytest.raises(ValueError):
         match_spans(gold, pred, "fuzzy")
 
 
 def test_mentions_and_kappa():
-    assert match_mentions({("python", "TOOL"), ("sql", "TOOL")}, {("python", "TOOL"), ("aws", "TOOL")}) == (1, 1, 1)
+    assert match_mentions({("python", "TECHNOLOGY"), ("sql", "TECHNOLOGY")}, {("python", "TECHNOLOGY"), ("aws", "TECHNOLOGY")}) == (1, 1, 1)
     assert cohen_kappa(["A", "B", "A", "O"], ["A", "B", "A", "O"]) == 1.0
     assert cohen_kappa(["A", "A", "O", "O"], ["A", "O", "A", "O"]) == 0.0
     with pytest.raises(ValueError):
@@ -89,21 +89,21 @@ def test_ner_evaluation_on_sample():
     overall = result["scores"]["overall"]
     assert overall["tp"] + overall["fn"] == sum(len(r["gold"]) for r in _sample_ner())
     assert overall["precision"] > 0.8 and overall["recall"] > 0.75
-    assert set(result["scores"]) == {"overall", "SKILL", "TOOL", "CERT"}
+    assert set(result["scores"]) == {"overall", "TECHNOLOGY", "SKILL", "METHODOLOGY"}
     assert 0.8 < result["inter_annotator"]["pairwise_f1"] <= 1 and result["inter_annotator"]["cohen_kappa_tokens"] > 0.8
     assert any("50 job adverts" in w for w in result["warnings"])
 
 
 def test_ner_document_mode_uses_names():
     records = [{"id": "x", "text": "Kubernetes and K8s clusters with Python.",
-                "gold": [{"text": "Kubernetes", "label": "TOOL"}, {"text": "Python", "label": "TOOL"}]}]
+                "gold": [{"text": "Kubernetes", "label": "TECHNOLOGY"}, {"text": "Python", "label": "TECHNOLOGY"}]}]
     result = evaluate_ner(records, mode="document")
     assert result["scores"]["overall"]["recall"] == 1.0 and result["scores"]["overall"]["fp"] == 0
 
 
 def test_ner_validation_errors():
     with pytest.raises(ValueError, match="outside the text"):
-        evaluate_ner([{"text": "short", "gold": [{"start": 0, "end": 99, "label": "TOOL"}]}])
+        evaluate_ner([{"text": "short", "gold": [{"start": 0, "end": 99, "label": "TECHNOLOGY"}]}])
     with pytest.raises(ValueError, match="missing text"):
         evaluate_ner([{"gold": []}])
 
@@ -162,6 +162,6 @@ def test_eval_cli(app, tmp_path):
     result = runner.invoke(args=["eval", "sus", str(SAMPLES / "sus_responses.sample.csv"), "--output", str(tmp_path / "s.json")])
     assert result.exit_code == 0 and "SUS: n=6" in result.output
     bad = tmp_path / "bad.jsonl"
-    bad.write_text(json.dumps({"text": "x", "gold": [{"start": 0, "end": 5, "label": "TOOL"}]}) + "\n")
+    bad.write_text(json.dumps({"text": "x", "gold": [{"start": 0, "end": 5, "label": "TECHNOLOGY"}]}) + "\n")
     result = runner.invoke(args=["eval", "ner", str(bad)])
     assert result.exit_code != 0 and "outside the text" in result.output

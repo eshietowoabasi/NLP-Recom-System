@@ -42,7 +42,7 @@ Then open `https://<server>/`, sign in as the Admin, and:
 
 1. Upload the **NUC CCMAS core curriculum** as a *NUC Core Reference*
    document. Analyses can't run without it.
-2. Create the planner and viewer accounts under **Users**.
+2. Create the Curriculum Planner accounts under **Users**.
 
 To save typing, set
 `alias dc='docker compose -f docker-compose.yml -f docker-compose.prod.yml'`.
@@ -60,6 +60,9 @@ To save typing, set
 | `SPACY_MODEL` | `en_core_web_sm` | |
 | `UPLOAD_FOLDER` / `REPORT_FOLDER` | `/data/raw`, `/data/reports` | Docker volumes |
 | `STALE_RUN_MINUTES` | `30` | A run with no progress for this long is marked Failed |
+| `PIPELINE_SOFT_TIME_LIMIT` | `900` | Seconds an analysis may run before it is stopped and marked Failed |
+| `DEFAULT_OVERLAP_THRESHOLD` | `0.80` | Default similarity threshold for new sessions (an Admin's NLP defaults override it) |
+| `DEFAULT_TOPIC_COUNT` | `10` | Default BERTopic topic count for new sessions (likewise) |
 | `TRUSTED_ORIGINS` | — | Extra `host[:port]` values allowed to send changes, for example a second DNS name |
 | `INSTITUTION_NAME` | University of Uyo, Computer Science | Shown on reports |
 | `BEHIND_PROXY` | — | Set to `1` (done in the production override) to trust Nginx's forwarded headers |

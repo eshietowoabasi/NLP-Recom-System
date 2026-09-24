@@ -75,7 +75,7 @@ def describe(values: list[float]) -> dict:
 
 def roc_summary(labels: list[int], scores: list[float], threshold: float) -> dict:
     """AUC-ROC, the Youden-optimal threshold, and classification quality at ``threshold``
-    (positive = score > threshold, matching the overlap rule in spec §9)."""
+    (positive = score >= threshold, matching the overlap rule in spec v2 §5)."""
     from sklearn.metrics import roc_auc_score, roc_curve
 
     if len(set(labels)) < 2:
@@ -85,15 +85,14 @@ def roc_summary(labels: list[int], scores: list[float], threshold: float) -> dic
     best = max(range(len(thresholds)), key=lambda i: (tpr[i] - fpr[i], -abs(thresholds[i] - threshold)))
 
     def at(t):
-        predicted = [s > t for s in scores]
+        predicted = [s >= t for s in scores]  # spec v2 §5: flagged when similarity >= threshold
         tp = sum(p and l == 1 for p, l in zip(predicted, labels))
         fp = sum(p and l == 0 for p, l in zip(predicted, labels))
         fn = sum((not p) and l == 1 for p, l in zip(predicted, labels))
         tn = len(labels) - tp - fp - fn
         return {**prf(tp, fp, fn), "tn": tn, "accuracy": round((tp + tn) / len(labels), 4), "threshold": round(float(t), 4)}
 
-    # roc_curve thresholds are ">=" cut points; nudge below so our ">" rule includes that score.
-    youden_t = float(thresholds[best]) - 1e-9 if math.isfinite(thresholds[best]) else 1.0
+    youden_t = float(thresholds[best]) if math.isfinite(thresholds[best]) else 1.0
     return {
         "auc_roc": round(float(auc), 4),
         "at_configured_threshold": at(threshold),

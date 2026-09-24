@@ -9,10 +9,10 @@ This log records how each one is resolved. **Status** is one of:
 
 | # | Gap (guide §21) | Resolution | Status |
 |---|-----------------|------------|--------|
-| D1 | SBERT checkpoint and embedding dimension | `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions), set with `SBERT_MODEL` and baked into the Docker image. The embedding backend can be swapped (`EMBEDDING_BACKEND=sbert\|hashing`). `hashing` is a deterministic lexical stand-in for tests and offline development, and every run that uses it carries a warning. `all-mpnet-base-v2` (768 dimensions) is the fallback if the §17.3 evaluation shows too little separation. Embeddings are stored as JSON float arrays. | Decided |
+| D1 | SBERT checkpoint and embedding dimension | `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions), set with `SBERT_MODEL` and baked into the Docker image. Spec v2 names `all-mpnet-base-v2` (768 dimensions); the project owner chose to keep MiniLM for speed on CPU (see *Updated specification (v2)* below). The embedding backend can be swapped (`EMBEDDING_BACKEND=sbert\|hashing`). `hashing` is a deterministic lexical stand-in for tests and offline development, and every run that uses it carries a warning. `all-mpnet-base-v2` (768 dimensions) is the fallback if the §17.3 evaluation shows too little separation. Embeddings are stored as JSON float arrays. | Decided |
 | D2 | Authentication mechanism | Server-side cookie session using Flask-Login. The cookie is `HttpOnly` and `SameSite=Lax`, and `Secure` in production. The Vue app and API share one origin behind Nginx, so no tokens are held in browser storage. Passwords are hashed with bcrypt. | Decided |
 | D3 | Background jobs and progress transport | Celery with Redis (`worker` service). `POST /run` claims the session with a conditional update, so it can't be started twice, and returns 202. The frontend polls `GET /api/sessions/{id}` for `progress.stage`. If Redis is down, the session is put back to its previous status and the request returns 503 `QUEUE_UNAVAILABLE`. | Decided |
-| D4 | 0–1 normalisation of the NER and topic scores | **NER score:** `log(1 + m) / log(1 + max m)`, where *m* is the number of SKILL/TOOL/CERT mentions in the candidate topic's passages, counting repeats. The log keeps one very large theme from flattening every other score. **Topic score:** `0.5 · passages / max passages + 0.5 · documents / max documents`, so a theme found across many sources outranks one repeated at length in a single document. BERTopic probabilities aren't used: they are per passage, and computing them costs HDBSCAN time. Both scores are relative to the session's candidates, and the database enforces 0–1 on every score column. | Decided |
+| D4 | 0–1 normalisation of the NER and topic scores | As defined in spec v2 §6. **NER score** `N_c = m / max m`, where *m* is the number of TECHNOLOGY/SKILL/METHODOLOGY mentions in the candidate topic's passages, counting repeats. **Topic score** `B_c = ctfidf_c / max ctfidf`, where `ctfidf_c` is the sum of the topic's top c-TF-IDF keyword scores from BERTopic. **Novelty** `V_c = 1 − max cosine similarity` to the NUC core segments. All three are relative to the session's candidates, and the database enforces 0–1 on every score column. (Before v2, N_c was log-scaled and B_c mixed passage and document counts.) | Decided |
 | D5 | Human-readable topic titles | The top 3 non-overlapping c-TF-IDF terms, spelled as they most often appear in the source text (e.g. "CISSP, PyTorch, Cloud"). KeyBERTInspired was dropped because it needs BERTopic to hold its own embedding model, while we pass embeddings in. Planners will be able to rename topics during review (Sprint 5). | Decided |
 | D6 | Dedicated Evidence table | Not in v1. Passages are stored in `nlp_results.topics` and `ner_entities` (JSON with `document_id` and character offsets). This will be revisited if the dashboard needs to query across passages. | Proposed |
 | D7 | File storage | Files are stored on the local filesystem under `UPLOAD_FOLDER` (`data/raw` in development, a Docker volume at `/data/raw` in containers) and named with UUIDs rather than the uploaded filename. | Decided |
@@ -40,22 +40,23 @@ This log records how each one is resolved. **Status** is one of:
 
 ### Mapping, reports and frontend (Sprint 5)
 
+- **One course per recommendation** (spec v2: a one-to-one CurriculumMap). The database has a unique constraint on `curriculum_maps.rec_id`; a second POST returns `409 MAPPING_EXISTS` with the existing `map_id`.
 - **Only Accepted recommendations** can be mapped (`409 NOT_ACCEPTED`). Once a recommendation is mapped, its decision can't move away from Accepted until the mapping is deleted (`409 MAPPING_EXISTS`), which keeps the course-to-evidence trace intact (§16).
-- **Course codes** must match `AAA 999[A]`, are normalised to upper case with one space, and are unique within a session. Credit units are 1–3, enforced in both the API and the database. Each mapping needs 1–12 learning outcomes and up to 8 prerequisites (course codes, not including the course itself).
+- **Course codes** must match `AAA 999[A]` with an optional institution prefix (`UUY-CSC 411`), are normalised to upper case with one space, and are unique within a session. Credit units are 1–3, enforced in both the API and the database. Each mapping needs 1–12 learning outcomes and up to 8 prerequisites (course codes, not including the course itself).
 - **Planners can rename recommendations** (D5); the change is audited with the old and new title.
 - **A new `Report` table** records the session, author, format, file path and size. Reports are snapshots: they aren't regenerated when decisions change later.
 - **Admin safety:** an Admin cannot remove their own Admin role or deactivate themselves, so the system can't be left without one. New passwords need at least 8 characters.
 - **`pool_pre_ping`** is enabled on the database engine. The end-to-end suite surfaced errors on the first requests after the database was recreated, and a PostgreSQL restart in production would cause the same.
-- **Frontend:** Vue 3 + Vite + Pinia + Bootstrap 5, with no UI component library. Authentication uses the session cookie on the same origin (D2). A 401 response sends the user to `/login?next=…`. Session pages poll every 2.5 s while a run is processing (D3).
+- **Frontend:** Vue 3 + Vite + Pinia + Bootstrap 5, with no UI component library. Authentication uses the session cookie on the same origin (D2). A 401 response sends the user to `/login?next=…`. Session pages poll every 3 s while a run is processing (D3) and open the recommendations when the run completes.
 - **Deployment:** the `frontend` image builds the app and serves it from Nginx, which also proxies `/api` to the backend, handles SPA fallback routing and sets basic security headers. HTTPS termination still needs to be added with the institution's certificate (Sprint 6).
 
 ### Recommendations (Sprint 4)
 
 - **Candidates** are the session's BERTopic topics (Appendix C: `build_topic_candidates`). Outlier passages don't produce candidates. If topic modelling was skipped (too little text), the session completes with no recommendations and a warning.
 - **The core reference** is every parsed NUC Core Reference document in the library, not just those in the session. The run endpoint refuses to start without one (`409 NO_CORE_REFERENCE`), so compute isn't wasted on a run that cannot finish. Core segments are text blocks of 3–60 words (longer blocks become sentence windows), which keeps course titles such as "CSC 421: Cloud Computing" as their own segments.
-- **The threshold test** is `max_similarity > threshold` on the value rounded to 4 decimals (the precision the API reports), so float32 noise can't flip the status at exactly 0.80.
-- **Potential duplicates** stay visible but rank after every novel candidate, and they count towards `max_recommendations`. Accepting one requires planner notes (`422 JUSTIFICATION_REQUIRED`), which puts §9's "should not proceed without planner review" into practice.
-- **Decisions** can be made by the session owner or an Admin. Everyone else can read them. `null` clears a decision, and every change is audited with its previous and new value.
+- **The threshold test** is `max_similarity ≥ threshold` (spec v2), on the value rounded to 4 decimals (the precision the API reports), so float32 noise can't flip the status at exactly 0.80.
+- **Ranking** is purely by composite score `S_c`, and the top `max_recommendations` are kept (spec v2). Potential duplicates are not pushed down; they stay in place with a *Flagged* badge. Accepting one requires planner notes (`422 JUSTIFICATION_REQUIRED`), which puts "should not proceed without planner review" into practice. This justification rule is kept as an addition to spec v2.
+- **Decisions** are `Accepted`, `Rejected` or `null` (pending); `null` is the Undo action. They can be made by the session owner or an Admin; everyone else can read them. Every change is audited with its previous and new value.
 - **Evidence** (`recommendations.evidence`, JSON) holds the source topic, keywords, representative passages, document IDs, source-category counts, top skills and the closest core segments with their document titles. It gives the traceability required in §16. A separate Evidence table (D6) is still not needed.
 
 ### NLP pipeline (Sprint 3)
@@ -68,6 +69,7 @@ This log records how each one is resolved. **Status** is one of:
 - **NUC Core Reference documents** in a session are processed per document, but kept out of corpus keywords, skill demand and topics. A session with only core references fails with a clear reason.
 - **Completed sessions can't be re-run.** Their results, and later the planner decisions, are kept; re-analysing means creating a new session. Failed sessions can be retried.
 - **Storage:** corpus-level output (keywords, skill demand, topics with centroid embeddings) is stored in `analysis_sessions.corpus_results`. Run metadata (models, stage timings, counts, warnings) goes in `analysis_sessions.pipeline_info`. Per-document output goes in `nlp_results`, with the mean passage embedding as the document embedding. API responses never include embeddings.
+- **NER labels** follow spec v2: `TECHNOLOGY` (languages, frameworks, platforms, tools), `SKILL` (competencies such as Cloud Computing, and certifications) and `METHODOLOGY` (Agile, DevOps, CI/CD, TDD…). Certifications were a separate `CERT` label before v2; the spec has no such label, so they are folded into `SKILL`.
 - **NER patterns** are in `services/ner/patterns.py`. Acronyms and product names that are also ordinary words (`AI`, `Spark`, `Swift`, `Node`) are matched case-sensitively. `Go`, `R` and `C` match only when followed by words like "programming" or "language". Bare "compliance" is not matched because it is too common in legal text.
 - **Gensim LDA baseline** (§8.5/§17.2) is part of the evaluation toolkit (`flask eval topics`), not the live pipeline. Planners only need BERTopic's output; LDA exists for the comparison in the write-up.
 - **Stuck sessions:** each stage updates `heartbeat_at`. The `scheduler` service (Celery beat) runs every 5 minutes and marks runs with no heartbeat for `STALE_RUN_MINUTES` (default 30) as Failed with an explanation, so they can be retried. The same check is available as `flask fail-stale-runs`.
@@ -83,3 +85,44 @@ This log records how each one is resolved. **Status** is one of:
 - **Session inputs**: every document in a session must be `Parsed`. Duplicate IDs are removed, and the order given in the request becomes `processing_order`.
 - **TF-IDF tokens**: only content-word parts of speech are kept (`NOUN`, `PROPN`, `VERB`, `ADJ` and `X`). spaCy's stop-word list misses modal verbs such as *shall*, which dominated the sample constitutions.
 - **AuditLog.user_id**: nullable, so failed logins and system actions can still be recorded.
+
+## Updated specification (v2)
+
+The project owner supplied an updated developer documentation (v2, kept as
+`docs/NLP_RS_Developer_Documentation_v2.pdf`). The behaviour it changes is
+implemented (migration `7c1d2e3f4a5b`):
+
+- Roles are **Admin** and **Curriculum Planner** only (Viewer removed; existing Viewer accounts become Planners).
+- Decisions are **Accepted / Rejected / pending** with Undo (Flagged removed; existing Flagged decisions become pending). "Flagged" now only describes the overlap badge.
+- Scoring formulas, ranking by `S_c`, and the inclusive `≥` overlap threshold (D4 and *Recommendations* above).
+- NER labels TECHNOLOGY / SKILL / METHODOLOGY.
+- BERTopic `nr_topics` from the session's **topic count** (default 10).
+- **Admin NLP defaults** (threshold, weights, topic count, recommendations shown) stored in the new `system_settings` table, with `DEFAULT_OVERLAP_THRESHOLD` and `DEFAULT_TOPIC_COUNT` environment defaults underneath.
+- **CSV uploads**, a **20 MB** file limit, drag-and-drop multi-file upload with progress, and `flask seed-core` for loading the CCMAS core curriculum.
+- One-to-one curriculum mapping, with prerequisite tags and institution-prefixed course codes.
+- A 15-minute pipeline time limit (Celery soft limit), with a clear failure message.
+- Evaluation targets: C_v ≥ 0.50, AUC ≥ 0.80, and a new **coverage** metric (accepted ÷ reviewed, target ≥ 0.85; `flask eval coverage`).
+- Score-breakdown bars and Clear/Flagged badges on recommendation cards; Admin pages for the core curriculum and NLP defaults.
+
+### Deliberate deviations from v2
+
+The project owner chose to keep these as they are:
+
+| Spec v2 | This implementation | Why |
+|---|---|---|
+| JWT access and refresh tokens (`/auth/refresh`) | HttpOnly cookie session (D2) | Same-origin app; no tokens in browser storage |
+| UUID primary keys | Integer keys | Existing data and migrations; no external IDs needed |
+| `/api/v1/...` prefix and its endpoint shapes (`/sessions/{id}/status`, `/recommendations/{id}/map`, `/curriculum-maps`, async `/reports/{task_id}`, `/admin/core-curriculum`, `/admin/audit-logs`) | `/api/...` as in `docs/API.md` (`/sessions/{id}` carries status and progress; `/recommendations/{id}/mapping`; `/mappings/{id}`; reports generated synchronously in ~1 s; core curriculum is a document category; `/admin/audit`) | Avoid breaking the frontend and tests for naming only |
+| Field and enum names: `doc_type`, overlap `clear`/`flagged`, lower-case decisions and statuses, `User.name`, `created_at`/`updated_at` everywhere | `source_category`, `No Significant Overlap`/`Potential Duplicate`, `Accepted`/`Rejected`, `Pending`/`Processing`/`Completed`/`Failed`, `username`, timestamps where they're used | Same meaning; the UI shows spec wording (Clear/Flagged) |
+| `all-mpnet-base-v2` (768-d) | `all-MiniLM-L6-v2` (384-d) (D1) | Much faster on CPU; swap with `SBERT_MODEL` |
+| PyPDF2 | PyMuPDF | Better text extraction; PyPDF2 is deprecated |
+| Pinned library versions | Newer releases | Security fixes; same APIs |
+| Evaluation notebook (`tests/evaluation/nlp_benchmarks.ipynb`) | `flask eval …` CLI saving JSON | Repeatable and testable |
+| Credit units as a free number | 1–3, enforced | Matches the University's course structure |
+| `api/`, `nlp/` package names and frontend route names | `routes/`, `services/` and the routes in `frontend/src/router` | Naming only |
+
+### Error in the spec's worked example
+
+Spec v2 §6 computes `0.40 × 0.85 + 0.35 × 0.72 + 0.25 × 0.66` and gives
+**0.78**. The correct value is **0.757** (≈ 0.76). The implementation uses the
+formula, and `test_recommendations.py` pins the worked example at 0.757.

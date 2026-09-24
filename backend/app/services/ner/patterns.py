@@ -1,12 +1,13 @@
-"""Curated Computing skill/tool/certification vocabulary for the spaCy EntityRuler (spec §8.3).
+"""Curated Computing vocabulary for the spaCy EntityRuler (spec v2 §5, stage 4).
 
 Each entry maps a canonical name to the surface forms matched case-insensitively.
 Extend this list as the corpus grows; tests guard the tricky tokenisations.
 
-Labels:
-  SKILL - knowledge areas and practices (machine learning, penetration testing)
-  TOOL  - languages, frameworks, platforms and products (Python, Kubernetes, AWS)
-  CERT  - professional certifications (CISSP, CCNA)
+Labels (spec v2: TECHNOLOGY / SKILL / METHODOLOGY):
+  TECHNOLOGY  - languages, frameworks, platforms and products (Python, Kubernetes, AWS)
+  SKILL       - knowledge areas and competencies, including professional
+                certifications (machine learning, penetration testing, CISSP)
+  METHODOLOGY - ways of working and engineering practices (Agile, DevOps, CI/CD, TDD)
 """
 
 SKILLS = {
@@ -32,22 +33,17 @@ SKILLS = {
     "Cryptography": ["cryptography", "encryption", "public key infrastructure", "PKI"],
     "Identity and Access Management": ["identity and access management", "IAM", "access control"],
     "Governance, Risk and Compliance": ["GRC", "risk management", "regulatory compliance", "compliance management", "data protection", "NDPR", "NDPA", "GDPR"],
-    "Cloud Computing": ["cloud computing", "cloud infrastructure", "cloud services", "cloud architecture"],
+    "Cloud Computing": ["cloud computing", "cloud infrastructure", "cloud services", "cloud architecture", "cloud deployment"],
     "Cloud Security": ["cloud security"],
-    "DevOps": ["DevOps", "DevSecOps", "site reliability engineering", "SRE"],
-    "CI/CD": ["CI/CD", "continuous integration", "continuous delivery", "continuous deployment"],
-    "Infrastructure as Code": ["infrastructure as code", "IaC"],
     "Containerisation": ["containerization", "containerisation", "containers", "microservices"],
     "Networking": ["computer networking", "networking", "TCP/IP", "routing and switching", "network administration"],
     "Systems Administration": ["systems administration", "system administration", "sysadmin"],
     "Software Engineering": ["software engineering", "software development", "software design"],
     "Web Development": ["web development", "frontend development", "front-end development", "backend development", "back-end development", "full stack", "full-stack"],
     "Mobile Development": ["mobile development", "mobile app development", "android development", "iOS development"],
-    "API Development": ["API development", "REST APIs", "RESTful APIs", "REST API", "RESTful", "GraphQL"],
-    "Object-Oriented Programming": ["object-oriented programming", "object oriented programming", "OOP"],
+    "API Development": ["API development", "REST API design", "REST APIs", "RESTful APIs", "REST API", "RESTful", "GraphQL"],
     "Software Testing": ["software testing", "unit testing", "test automation", "quality assurance"],
     "Version Control": ["version control", "source control"],
-    "Agile Methods": ["agile", "scrum", "kanban", "agile methodology"],
     "UI/UX Design": ["UI/UX design", "UI/UX", "user experience", "user interface design", "UX design", "UI design"],
     "Blockchain": ["blockchain", "smart contracts", "distributed ledger"],
     "Internet of Things": ["internet of things", "IoT", "embedded systems"],
@@ -60,6 +56,19 @@ SKILLS = {
     "Business Analysis": ["business analysis", "requirements analysis", "requirements engineering"],
     "Operating Systems": ["operating systems"],
     "Algorithms and Data Structures": ["algorithms", "data structures"],
+}
+
+METHODOLOGIES = {
+    "DevOps": ["DevOps", "DevSecOps", "site reliability engineering", "SRE"],
+    "CI/CD": ["CI/CD", "continuous integration", "continuous delivery", "continuous deployment"],
+    "Infrastructure as Code": ["infrastructure as code", "IaC"],
+    "Object-Oriented Programming": ["object-oriented programming", "object oriented programming", "OOP"],
+    "Agile Methods": ["agile", "scrum", "kanban", "agile methodology"],
+    "Test-Driven Development": ["test-driven development", "TDD", "behaviour-driven development", "behavior-driven development", "BDD"],
+    "Waterfall": ["waterfall model", "waterfall methodology"],
+    "Design Thinking": ["design thinking"],
+    "Lean": ["lean methodology", "lean software development"],
+    "Pair Programming": ["pair programming", "code review", "code reviews"],
 }
 
 TOOLS = {
@@ -107,7 +116,7 @@ CERTS = {
 # Ambiguous names that need context: the verb "go", list items "(c)"/"(r)".
 _LANG_CONTEXT = {"LOWER": {"IN": ["programming", "language", "developer", "developers", "programmer", "programmers"]}}
 TOKEN_PATTERNS = [
-    ("TOOL", name, [{"ORTH": name}, _LANG_CONTEXT]) for name in ("Go", "R", "C")
+    ("TECHNOLOGY", name, [{"ORTH": name}, _LANG_CONTEXT]) for name in ("Go", "R", "C")
 ]
 CONTEXT_ONLY = {"Go", "R", "C"}
 
@@ -131,7 +140,7 @@ def build_patterns(tokenizer):
     ("C#" -> "C", "#"; "CI/CD" -> "CI", "/", "CD") become matching token sequences.
     """
     patterns = []
-    for vocabulary, label in ((SKILLS, "SKILL"), (TOOLS, "TOOL"), (CERTS, "CERT")):
+    for vocabulary, label in ((SKILLS, "SKILL"), (CERTS, "SKILL"), (METHODOLOGIES, "METHODOLOGY"), (TOOLS, "TECHNOLOGY")):
         for canonical, forms in vocabulary.items():
             for form in forms:
                 if _is_case_sensitive(form):

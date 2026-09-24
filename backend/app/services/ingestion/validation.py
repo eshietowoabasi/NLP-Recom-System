@@ -63,7 +63,7 @@ def validate_upload(filename, data: bytes, max_bytes: int) -> FileType:
         file_type = FileType(ext)
     except ValueError:
         raise UnsupportedFileError(
-            "Unsupported file type. Upload PDF, DOCX or TXT files.",
+            "Unsupported file type. Upload PDF, DOCX, TXT or CSV files.",
             details={"file": f"'.{ext}' is not supported" if ext else "File has no extension"},
         )
 
@@ -80,6 +80,7 @@ def validate_upload(filename, data: bytes, max_bytes: int) -> FileType:
         FileType.PDF: lambda: _looks_like_pdf(head),
         FileType.DOCX: lambda: _looks_like_docx(data),
         FileType.TXT: lambda: _looks_like_text(head),
+        FileType.CSV: lambda: _looks_like_text(head),
     }
     if not checks[file_type]():
         raise UnsupportedFileError(

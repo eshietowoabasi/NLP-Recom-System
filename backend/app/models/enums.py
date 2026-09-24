@@ -7,7 +7,6 @@ import sqlalchemy as sa
 class Role(str, enum.Enum):
     ADMIN = "Admin"
     PLANNER = "Curriculum Planner"
-    VIEWER = "Viewer"
 
 
 class SourceCategory(str, enum.Enum):
@@ -22,6 +21,7 @@ class FileType(str, enum.Enum):
     PDF = "pdf"
     DOCX = "docx"
     TXT = "txt"
+    CSV = "csv"  # spec v2 §5 stage 1: e.g. the core-curriculum course list
 
 
 class DocumentStatus(str, enum.Enum):
@@ -45,7 +45,6 @@ class OverlapStatus(str, enum.Enum):
 class PlannerDecision(str, enum.Enum):
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
-    FLAGGED = "Flagged"
 
 
 def enum_column(enum_cls, name):

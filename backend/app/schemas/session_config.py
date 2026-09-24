@@ -1,4 +1,4 @@
-"""Analysis-session parameter_config defaults and validation (spec §9, §10, Appendix A1)."""
+"""Analysis-session parameter_config defaults and validation (spec v1 §9-§10; v2 §4, §6)."""
 import math
 
 from ..utils.errors import ValidationError
@@ -9,15 +9,17 @@ DEFAULT_SESSION_CONFIG = {
     "topic_weight": 0.35,
     "novelty_weight": 0.25,
     "max_recommendations": 20,
+    "topic_count": 10,  # spec v2 §4: BERTopic topic count, default 10
 }
 
 WEIGHT_KEYS = ("ner_weight", "topic_weight", "novelty_weight")
 _FLOAT_KEYS = ("similarity_threshold",) + WEIGHT_KEYS
 MAX_RECOMMENDATIONS_CEILING = 100
+INT_LIMITS = {"max_recommendations": (1, MAX_RECOMMENDATIONS_CEILING), "topic_count": (2, 100)}
 
 
-def build_session_config(overrides=None):
-    """Merge user overrides onto the defaults and validate the result.
+def build_session_config(overrides=None, base=None):
+    """Merge user overrides onto the defaults (``base``, else the built-in ones) and validate.
 
     Raises ValidationError with per-field details on bad input.
     """
@@ -28,7 +30,7 @@ def build_session_config(overrides=None):
     unknown = set(overrides) - set(DEFAULT_SESSION_CONFIG)
     errors = {key: "Unknown parameter" for key in sorted(unknown)}
 
-    config = dict(DEFAULT_SESSION_CONFIG)
+    config = {**DEFAULT_SESSION_CONFIG, **(base or {})}
     for key in _FLOAT_KEYS:
         if key not in overrides:
             continue
@@ -40,14 +42,16 @@ def build_session_config(overrides=None):
         else:
             config[key] = float(value)
 
-    if "max_recommendations" in overrides:
-        value = overrides["max_recommendations"]
+    for key, (low, high) in INT_LIMITS.items():
+        if key not in overrides:
+            continue
+        value = overrides[key]
         if isinstance(value, bool) or not isinstance(value, int):
-            errors["max_recommendations"] = "Must be an integer"
-        elif not 1 <= value <= MAX_RECOMMENDATIONS_CEILING:
-            errors["max_recommendations"] = f"Must be between 1 and {MAX_RECOMMENDATIONS_CEILING}"
+            errors[key] = "Must be an integer"
+        elif not low <= value <= high:
+            errors[key] = f"Must be between {low} and {high}"
         else:
-            config["max_recommendations"] = value
+            config[key] = value
 
     if not any(key in errors for key in WEIGHT_KEYS):
         total = sum(config[key] for key in WEIGHT_KEYS)

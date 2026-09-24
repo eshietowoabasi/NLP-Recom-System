@@ -18,7 +18,8 @@ const form = reactive({
   session_name: '',
   selected: [],
   showAdvanced: false,
-  config: { similarity_threshold: 0.8, ner_weight: 0.4, topic_weight: 0.35, novelty_weight: 0.25, max_recommendations: 20 },
+  // Replaced by the Admin-managed defaults on load (spec v2 §1).
+  config: { similarity_threshold: 0.8, ner_weight: 0.4, topic_weight: 0.35, novelty_weight: 0.25, max_recommendations: 20, topic_count: 10 },
   busy: false,
   error: null,
 })
@@ -33,6 +34,10 @@ async function load(page = 1) {
   } catch (e) {
     error.value = e
   }
+}
+
+async function loadDefaults() {
+  form.config = { ...form.config, ...(await api.get('/sessions/defaults')).parameter_config }
 }
 
 async function loadDocuments() {
@@ -59,7 +64,10 @@ async function create() {
 
 onMounted(() => {
   load()
-  if (auth.canWrite) loadDocuments().catch((e) => (error.value = e))
+  if (auth.canWrite) {
+    loadDocuments().catch((e) => (error.value = e))
+    loadDefaults().catch((e) => (error.value = e))
+  }
 })
 </script>
 
@@ -97,6 +105,10 @@ onMounted(() => {
       <div class="col-sm-4 col-lg-2" v-for="(label, key) in { similarity_threshold: 'Overlap threshold', ner_weight: 'NER weight', topic_weight: 'Topic weight', novelty_weight: 'Novelty weight' }" :key="key">
         <label class="form-label small" :for="key">{{ label }}</label>
         <input :id="key" v-model.number="form.config[key]" class="form-control form-control-sm" type="number" step="0.05" min="0" max="1" />
+      </div>
+      <div class="col-sm-4 col-lg-2">
+        <label class="form-label small" for="topic-count">Topic count</label>
+        <input id="topic-count" v-model.number="form.config.topic_count" class="form-control form-control-sm" type="number" min="2" max="100" />
       </div>
       <div class="col-sm-4 col-lg-2">
         <label class="form-label small" for="max-recs">Max recommendations</label>

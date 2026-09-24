@@ -13,16 +13,17 @@ class CurriculumMap(db.Model):
     )
 
     map_id: Mapped[int] = mapped_column(primary_key=True)
+    # Spec v2 §4: Recommendation 1-1 CurriculumMap.
     rec_id: Mapped[int] = mapped_column(
-        sa.ForeignKey("recommendations.rec_id", ondelete="CASCADE"), index=True
+        sa.ForeignKey("recommendations.rec_id", ondelete="CASCADE"), unique=True
     )
-    course_code: Mapped[str] = mapped_column(sa.String(16))
+    course_code: Mapped[str] = mapped_column(sa.String(20))  # e.g. "UUY-CSC 411"
     course_title: Mapped[str] = mapped_column(sa.String(255))
     credit_units: Mapped[int] = mapped_column(sa.Integer)
     prerequisites: Mapped[list | None] = mapped_column(sa.JSON)
     learning_outcomes: Mapped[list | None] = mapped_column(sa.JSON)
 
-    recommendation = relationship("Recommendation", back_populates="curriculum_maps")
+    recommendation = relationship("Recommendation", back_populates="curriculum_map")
 
     def to_dict(self):
         return {
