@@ -12,7 +12,8 @@ from .enums import (
 )
 from .nlp_result import NLPResult
 from .recommendation import Recommendation
-from .session import AnalysisSession, DocumentSession
+from .report import Report, ReportFormat
+from .session import PIPELINE_STAGES, AnalysisSession, DocumentSession
 from .user import User
 
 __all__ = [
@@ -26,8 +27,11 @@ __all__ = [
     "FileType",
     "NLPResult",
     "OverlapStatus",
+    "PIPELINE_STAGES",
     "PlannerDecision",
     "Recommendation",
+    "Report",
+    "ReportFormat",
     "Role",
     "SessionStatus",
     "SourceCategory",

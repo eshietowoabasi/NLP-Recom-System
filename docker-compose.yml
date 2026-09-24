@@ -13,27 +13,68 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
-    environment:
+    environment: &backend-env
       APP_CONFIG: ${APP_CONFIG:-development}
       SECRET_KEY: ${SECRET_KEY:-dev-insecure-key}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nlprs}:${POSTGRES_PASSWORD:-nlprs}@postgres:5432/${POSTGRES_DB:-nlprs}
+      REDIS_URL: redis://redis:6379/0
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-sbert}
+      REPORT_FOLDER: /data/reports
+    volumes:
+      - uploads:/data/raw
+      - reports:/data/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Runs the NLP pipeline (spec §15). Scale with `docker compose up --scale worker=2`.
+  worker:
+    build: ./backend
+    command: ["celery", "-A", "celery_worker.celery", "worker", "--loglevel=info", "--concurrency=1"]
+    environment: *backend-env
     volumes:
       - uploads:/data/raw
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  nginx:
-    image: nginx:1.27-alpine
+  # Periodic jobs (celery beat): marks runs whose worker died as Failed (spec §15).
+  scheduler:
+    build: ./backend
+    command: ["celery", "-A", "celery_worker.celery", "beat", "--loglevel=info", "--schedule", "/tmp/celerybeat-schedule"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Vue frontend + reverse proxy (build context includes docker/nginx.conf).
+  frontend:
+    build:
+      context: ./frontend
+      additional_contexts:
+        nginxconf: ./docker
     ports:
       - "8080:80"
-    volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
 
 volumes:
   postgres_data:
   uploads:
+  reports:
