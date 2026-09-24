@@ -1,14 +1,15 @@
 import { defineStore } from 'pinia'
 import { api } from '../services/api'
 
-export const ROLES = { ADMIN: 'Admin', PLANNER: 'Curriculum Planner', VIEWER: 'Viewer' }
+// Spec v2 §1: Curriculum Planner and Administrator.
+export const ROLES = { ADMIN: 'Admin', PLANNER: 'Curriculum Planner' }
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({ user: null, checked: false }),
   getters: {
     isAuthenticated: (s) => !!s.user,
     isAdmin: (s) => s.user?.role === ROLES.ADMIN,
-    // Planners and Admins can upload, create/run sessions and review (spec §14).
+    // Every role can upload, create and run sessions (spec v2 §1).
     canWrite: (s) => [ROLES.ADMIN, ROLES.PLANNER].includes(s.user?.role),
   },
   actions: {

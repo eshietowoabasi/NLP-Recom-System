@@ -6,7 +6,7 @@ set -euo pipefail
 psql "$ADMIN_DB_URL" -qc "DROP DATABASE IF EXISTS ${E2E_DB_NAME} WITH (FORCE)" -c "CREATE DATABASE ${E2E_DB_NAME}"
 cd "$(dirname "$0")/../../../backend"
 flask db upgrade >/dev/null
-for spec in "admin|Admin" "planner|Curriculum Planner" "viewer|Viewer"; do
+for spec in "admin|Admin" "planner|Curriculum Planner" "planner2|Curriculum Planner"; do
   flask create-user --username "${spec%%|*}" --email "${spec%%|*}@example.edu" --role "${spec#*|}" \
     --password "${E2E_PASSWORD:-Passw0rd!}" >/dev/null
 done

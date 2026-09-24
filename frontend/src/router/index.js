@@ -26,6 +26,8 @@ export const routes = [
   { path: '/reports', name: 'reports', component: () => import('../views/ReportsView.vue') },
   { path: '/admin/users', name: 'admin-users', component: () => import('../views/AdminUsersView.vue'), meta: { roles: ['Admin'] } },
   { path: '/admin/audit', name: 'admin-audit', component: () => import('../views/AuditLogView.vue'), meta: { roles: ['Admin'] } },
+  { path: '/admin/core-curriculum', name: 'admin-core', component: () => import('../views/AdminCoreView.vue'), meta: { roles: ['Admin'] } },
+  { path: '/admin/settings', name: 'admin-settings', component: () => import('../views/AdminSettingsView.vue'), meta: { roles: ['Admin'] } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFoundView.vue') },
 ]
 

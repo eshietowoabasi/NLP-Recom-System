@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 from ..extensions import db
 from ..models import AnalysisSession, Document, DocumentSession, DocumentStatus, Role, SessionStatus
 from ..schemas.session_config import build_session_config
+from ..services.settings import get_nlp_defaults
 from ..utils.audit import record_audit
 from ..utils.errors import ApiError, ConflictError, NotFoundError, ValidationError
 from ..utils.pagination import paginate
@@ -78,7 +79,7 @@ def create_session():
     name = (payload.get("session_name") or "").strip() if isinstance(payload.get("session_name"), str) else ""
     if not name:
         raise ValidationError("session_name is required", details={"session_name": "Required"})
-    config = build_session_config(payload.get("parameter_config"))
+    config = build_session_config(payload.get("parameter_config"), base=get_nlp_defaults())
     document_ids = _validate_document_ids(payload.get("document_ids"))
 
     session = AnalysisSession(
@@ -173,3 +174,10 @@ def run_session(session_id):
         "message": "Analysis started",
         "progress": session.progress(),
     }), 202
+
+
+@bp.get("/defaults")
+@login_required
+def session_defaults():
+    """Default parameter_config for new sessions (set by Admins)."""
+    return jsonify({"success": True, "parameter_config": get_nlp_defaults()})

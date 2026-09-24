@@ -1,17 +1,15 @@
-"""Candidate building and recommendation scoring (spec §10; docs/DECISIONS.md, D4).
+"""Candidate building and recommendation scoring (spec v2 §6; docs/DECISIONS.md, D4).
 
-    composite = w_ner * ner_score + w_topic * topic_score + w_novelty * novelty_score
+    S_c = 0.40 * N_c + 0.35 * B_c + 0.25 * V_c      (weights configurable per session)
 
 All three components are normalised to [0, 1] across the session's candidates:
-- ner_score:   log(1 + m) / log(1 + max m), where m is the number of SKILL/TOOL/CERT
-               mentions in the candidate's passages. The log keeps one very large
-               theme from flattening every other score.
-- topic_score: mean of the candidate's passage share and document spread, each
-               relative to the session maximum, so a theme found in many sources
-               outranks one repeated at length in a single document.
-- novelty:     1 - max cosine similarity to the NUC core (spec §9).
+- N_c (NER demand):  count(entities_c) / max(count(entities) across candidates), where
+                     the count is SKILL/TECHNOLOGY/METHODOLOGY mentions in the topic's passages.
+- B_c (BERTopic relevance): the topic's c-TF-IDF score / the maximum across candidates.
+- V_c (novelty):     1 - max cosine similarity to the NUC 70% core (spec v2 §5).
+
+Candidates are ranked by S_c (descending) and the top ``max_recommendations`` are kept.
 """
-import math
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -36,6 +34,7 @@ class Candidate:
     representative_passages: list[dict]
     entity_mentions: Counter          # (name, label) -> mentions in the topic's passages
     entity_passages: Counter          # (name, label) -> distinct passages mentioning it
+    ctfidf_score: float = 0.0         # BERTopic c-TF-IDF strength of the topic
     # Filled in by scoring:
     title: str = ""
     description: str = ""
@@ -53,7 +52,7 @@ def candidate_title(candidate: Candidate) -> str:
     threshold = max(1, DOMINANT_SKILL_SHARE * candidate.distinct_passages)
     ranked = sorted(
         ((name, label, n) for (name, label), n in candidate.entity_passages.items() if n >= threshold),
-        key=lambda x: (x[1] != "SKILL", -x[2], x[0]),  # skills before tools/certs
+        key=lambda x: (x[1] != "SKILL", -x[2], x[0]),  # skills before technologies/methodologies
     )
     names = [name for name, _, _ in ranked[:2]]
     if not names:
@@ -75,19 +74,19 @@ def candidate_description(candidate: Candidate) -> str:
 
 
 def ner_scores(mentions: list[int]) -> list[float]:
+    """N_c = count / max count (spec v2 §6)."""
     top = max(mentions, default=0)
     if top <= 0:
         return [0.0 for _ in mentions]
-    return [round(math.log1p(m) / math.log1p(top), 4) for m in mentions]
+    return [round(m / top, 4) for m in mentions]
 
 
-def topic_scores(passage_counts: list[int], document_counts: list[int]) -> list[float]:
-    max_passages = max(passage_counts, default=0) or 1
-    max_docs = max(document_counts, default=0) or 1
-    return [
-        round(0.5 * p / max_passages + 0.5 * d / max_docs, 4)
-        for p, d in zip(passage_counts, document_counts)
-    ]
+def topic_scores(ctfidf_scores: list[float]) -> list[float]:
+    """B_c = topic c-TF-IDF score / max across candidates (spec v2 §6)."""
+    top = max(ctfidf_scores, default=0.0)
+    if top <= 0:
+        return [0.0 for _ in ctfidf_scores]
+    return [round(v / top, 4) for v in ctfidf_scores]
 
 
 def composite_score(ner: float, topic: float, novelty: float, config: dict) -> float:
@@ -98,7 +97,7 @@ def composite_score(ner: float, topic: float, novelty: float, config: dict) -> f
 def score_candidates(candidates: list[Candidate], overlaps: list, config: dict) -> None:
     """Fill in scores, titles and descriptions in place. ``overlaps`` aligns with candidates."""
     ner = ner_scores([sum(c.entity_mentions.values()) for c in candidates])
-    topic = topic_scores([c.passage_count for c in candidates], [len(c.document_ids) for c in candidates])
+    topic = topic_scores([c.ctfidf_score for c in candidates])
     used_titles = set()
     for candidate, overlap, n, t in zip(candidates, overlaps, ner, topic):
         candidate.ner_score = n
@@ -117,9 +116,7 @@ def score_candidates(candidates: list[Candidate], overlaps: list, config: dict) 
 
 
 def rank_candidates(candidates: list[Candidate], limit: int) -> list[Candidate]:
-    """Novel candidates first by composite score, then potential duplicates (spec §9:
-    they must not appear as normal high-priority recommendations), capped at ``limit``."""
-    def key(c):
-        return (c.overlap_status is OverlapStatus.POTENTIAL_DUPLICATE, -c.composite_score, c.topic_id)
-
-    return sorted(candidates, key=key)[:limit]
+    """Rank by composite score S_c, highest first, and keep the top ``limit`` (spec v2 §6).
+    Potential duplicates stay in the ranking; their low novelty lowers S_c and the
+    overlap badge marks them for the planner."""
+    return sorted(candidates, key=lambda c: (-c.composite_score, c.topic_id))[:limit]

@@ -1,4 +1,4 @@
-"""spaCy NER with custom Computing patterns and skill-demand aggregation (spec §8.3)."""
+"""spaCy NER with custom Computing patterns and skill-demand aggregation (spec v1 §8.3, v2 §5)."""
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -6,7 +6,7 @@ from functools import lru_cache
 from ..preprocessing.pipeline import DEFAULT_SPACY_MODEL
 from .patterns import build_patterns
 
-CUSTOM_LABELS = ("SKILL", "TOOL", "CERT")
+CUSTOM_LABELS = ("TECHNOLOGY", "SKILL", "METHODOLOGY")  # spec v2 §5
 # Standard spaCy labels kept as context (employers, products, regions for localisation).
 STANDARD_LABELS = ("ORG", "PRODUCT", "GPE")
 KEPT_LABELS = set(CUSTOM_LABELS + STANDARD_LABELS)
@@ -29,7 +29,7 @@ def load_ner_nlp(model_name: str = DEFAULT_SPACY_MODEL):
 @dataclass
 class DocumentEntities:
     entities: list[dict]  # [{"text", "label", "count"}], custom labels first, by count
-    # SKILL/TOOL/CERT (name, label) pairs found in each input sentence, aligned with the input.
+    # TECHNOLOGY/SKILL/METHODOLOGY (name, label) pairs found in each input sentence, aligned with the input.
     sentence_entities: list[list[tuple[str, str]]] = field(default_factory=list)
 
     def custom(self):
@@ -60,7 +60,7 @@ def extract_entities(sentences: list[str], model_name: str = DEFAULT_SPACY_MODEL
 
 
 def aggregate_skill_demand(per_document: dict[int, DocumentEntities]) -> list[dict]:
-    """Corpus-level demand for SKILL/TOOL/CERT entities.
+    """Corpus-level demand for TECHNOLOGY/SKILL/METHODOLOGY entities.
 
     ``mentions`` is the total count; ``document_frequency`` is how many documents mention
     it, which resists one long document dominating. Recommendation scoring (Sprint 4)

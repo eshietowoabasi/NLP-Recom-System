@@ -21,9 +21,17 @@ const stages = Object.keys(PIPELINE_STAGE_LABELS)
 const canReview = computed(() => auth.canReview(session.value))
 const runnable = computed(() => ['Pending', 'Failed'].includes(session.value?.status))
 
+// Set when this page saw the run in progress, so completion can redirect (spec v2 §8 UX note).
+let watchedRun = false
+
 async function load() {
   try {
     session.value = (await api.get(`/sessions/${props.id}`)).session
+    if (session.value.status === 'Processing') watchedRun = true
+    if (watchedRun && session.value.status === 'Completed') {
+      router.push(`/sessions/${props.id}/recommendations`)
+      return
+    }
     error.value = null
     const missing = session.value.document_ids.filter((id) => !documents.value[id])
     await Promise.all(
@@ -41,10 +49,10 @@ async function load() {
   schedulePoll()
 }
 
-// Poll while the background job runs (docs/DECISIONS.md, D3).
+// Poll every 3 s while the background job runs (spec v2 §8; docs/DECISIONS.md, D3).
 function schedulePoll() {
   clearTimeout(timer)
-  if (session.value?.status === 'Processing') timer = setTimeout(load, 2500)
+  if (session.value?.status === 'Processing') timer = setTimeout(load, 3000)
 }
 
 async function run() {
@@ -103,6 +111,7 @@ onBeforeUnmount(() => clearTimeout(timer))
       <div class="d-flex align-items-center gap-2 mb-2">
         <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
         <strong>{{ PIPELINE_STAGE_LABELS[session.progress.stage] || 'Working' }}…</strong>
+        <span class="text-body-secondary small ms-auto" data-test="progress-pct">{{ Math.round(((session.progress.step || 0) / session.progress.total_steps) * 100) }}%</span>
       </div>
       <div class="progress" role="progressbar" :aria-valuenow="session.progress.step || 0" aria-valuemin="0" :aria-valuemax="session.progress.total_steps">
         <div class="progress-bar" :style="{ width: `${((session.progress.step || 0) / session.progress.total_steps) * 100}%` }"></div>
@@ -158,6 +167,7 @@ onBeforeUnmount(() => clearTimeout(timer))
                 <td>{{ session.parameter_config.ner_weight }} / {{ session.parameter_config.topic_weight }} / {{ session.parameter_config.novelty_weight }}</td>
               </tr>
               <tr><th>Max recommendations</th><td>{{ session.parameter_config.max_recommendations }}</td></tr>
+              <tr><th>Topic count (BERTopic)</th><td>{{ session.parameter_config.topic_count ?? 'automatic' }}</td></tr>
               <tr><th>Created</th><td>{{ dateTime(session.created_at) }}</td></tr>
               <tr v-if="session.completed_at"><th>Completed</th><td>{{ dateTime(session.completed_at) }}</td></tr>
               <template v-if="session.pipeline_info">

@@ -11,7 +11,7 @@ import click
 from flask import current_app
 from flask.cli import AppGroup
 
-eval_cli = AppGroup("eval", help="Evaluation plan (spec §17): NER, topics, similarity, SUS, performance.")
+eval_cli = AppGroup("eval", help="Evaluation plan (spec v1 §17, v2 §5/§10): NER, topics, similarity, SUS, coverage, performance.")
 
 
 def _save(name, result, output):
@@ -108,7 +108,8 @@ def eval_topics(input_dir, session_id, backend, output):
     for name in ("bertopic", "lda"):
         r = result[name]
         click.echo(f"  {name:<9} C_v {r['c_v']:.4f}   diversity {r['diversity']:.3f}   {r['seconds']} s")
-    click.echo(f"Higher coherence: {result['better_coherence']}")
+    click.echo(f"Higher coherence: {result['better_coherence']}; BERTopic target C_v > {result['target_c_v']}: "
+               f"{'met' if result['meets_target'] else 'NOT met'}")
     _warnings(result)
     _save("topics", result, output)
 
@@ -128,7 +129,8 @@ def eval_similarity(pairs_csv, threshold, backend, output):
         raise click.ClickException(str(exc))
     at, best = result["at_configured_threshold"], result["youden_optimal"]
     click.echo(f"Semantic overlap evaluation: {result['pairs']} pairs, model {result['embedding_model']}")
-    click.echo(f"  AUC-ROC {result['auc_roc']:.4f}")
+    click.echo(f"  AUC-ROC {result['auc_roc']:.4f} (target > {result['target_auc_roc']}: "
+               f"{'met' if result['meets_target'] else 'NOT met'})")
     click.echo(f"  at threshold {threshold}: precision {at['precision']:.3f}, recall {at['recall']:.3f}, F1 {at['f1']:.3f}")
     click.echo(f"  Youden-optimal threshold {best['threshold']}: precision {best['precision']:.3f}, "
                f"recall {best['recall']:.3f}, F1 {best['f1']:.3f}")
@@ -171,3 +173,23 @@ def eval_performance(documents, words, input_dir, backend, output):
     click.echo("  " + ", ".join(f"{k} {v}s" for k, v in result["stage_seconds"].items()))
     _warnings(result)
     _save("performance", result, output)
+
+
+@eval_cli.command("coverage")
+@click.option("--session-id", "session_ids", type=int, multiple=True, required=True,
+              help="UAT session(s) to include; repeat the option for several.")
+@click.option("--output", type=click.Path(dir_okay=False))
+def eval_coverage(session_ids, output):
+    """Recommendation coverage: accepted / decided recommendations (target >= 85%)."""
+    from .coverage import evaluate_coverage
+
+    try:
+        result = evaluate_coverage(list(session_ids))
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    shown = "n/a" if result["coverage"] is None else f"{result['coverage']:.1%}"
+    click.echo(f"Coverage: {shown} ({result['accepted']} accepted, {result['rejected']} rejected, "
+               f"{result['pending']} pending); target >= {result['target']:.0%}: "
+               f"{'met' if result['meets_target'] else 'NOT met'}")
+    _warnings(result)
+    _save("coverage", result, output)

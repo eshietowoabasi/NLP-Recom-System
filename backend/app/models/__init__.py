@@ -14,6 +14,7 @@ from .nlp_result import NLPResult
 from .recommendation import Recommendation
 from .report import Report, ReportFormat
 from .session import PIPELINE_STAGES, AnalysisSession, DocumentSession
+from .setting import SystemSetting
 from .user import User
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "Role",
     "SessionStatus",
     "SourceCategory",
+    "SystemSetting",
     "User",
 ]

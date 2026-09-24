@@ -39,8 +39,8 @@ class Recommendation(db.Model):
     evidence: Mapped[dict | None] = mapped_column(sa.JSON, deferred=True)
 
     session = relationship("AnalysisSession", back_populates="recommendations")
-    curriculum_maps = relationship(
-        "CurriculumMap", back_populates="recommendation", cascade="all, delete-orphan"
+    curriculum_map = relationship(
+        "CurriculumMap", back_populates="recommendation", cascade="all, delete-orphan", uselist=False
     )
 
     def to_dict(self, include_evidence=False):

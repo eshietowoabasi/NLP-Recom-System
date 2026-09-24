@@ -19,7 +19,8 @@ describe('auth store and route guard', () => {
     expect(auth.canReview(session)).toBe(false)
     auth.user = { user_id: 8, role: ROLES.ADMIN }
     expect(auth.canReview(session)).toBe(true)
-    auth.user = { user_id: 7, role: ROLES.VIEWER }
+    expect(auth.canWrite).toBe(true)
+    auth.user = null
     expect(auth.canReview(session)).toBe(false)
     expect(auth.canWrite).toBe(false)
   })

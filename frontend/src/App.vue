@@ -1,23 +1,27 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
 const menuOpen = ref(false)
-const links = computed(() => [
+const links = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/documents', label: 'Documents' },
   { to: '/sessions', label: 'Sessions' },
   { to: '/reports', label: 'Reports' },
-  ...(auth.isAdmin
-    ? [
-        { to: '/admin/users', label: 'Users' },
-        { to: '/admin/audit', label: 'Audit log' },
-      ]
-    : []),
-])
+]
+// Spec v2 §8 AdminView: users, core curriculum repository, NLP defaults, audit log.
+const adminLinks = [
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/core-curriculum', label: 'Core curriculum' },
+  { to: '/admin/settings', label: 'NLP defaults' },
+  { to: '/admin/audit', label: 'Audit log' },
+]
+const adminOpen = ref(false)
+const route = useRoute()
+const onAdminPage = computed(() => route.path.startsWith('/admin'))
 
 async function logout() {
   await auth.logout()
@@ -36,6 +40,23 @@ async function logout() {
         <ul class="navbar-nav me-auto">
           <li v-for="link in links" :key="link.to" class="nav-item">
             <RouterLink class="nav-link text-nowrap" active-class="active" :to="link.to" @click="menuOpen = false">{{ link.label }}</RouterLink>
+          </li>
+          <li v-if="auth.isAdmin" class="nav-item dropdown" @mouseleave="adminOpen = false">
+            <button
+              class="nav-link dropdown-toggle text-nowrap btn btn-link"
+              :class="{ active: onAdminPage }"
+              type="button"
+              :aria-expanded="adminOpen"
+              data-test="admin-menu"
+              @click="adminOpen = !adminOpen"
+            >
+              Admin
+            </button>
+            <ul class="dropdown-menu" :class="{ show: adminOpen }">
+              <li v-for="link in adminLinks" :key="link.to">
+                <RouterLink class="dropdown-item" :to="link.to" @click="adminOpen = false; menuOpen = false">{{ link.label }}</RouterLink>
+              </li>
+            </ul>
           </li>
         </ul>
         <span class="navbar-text me-3 small text-nowrap" data-test="current-user">

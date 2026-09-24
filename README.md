@@ -103,26 +103,27 @@ All errors use the same shape:
 | POST | `/api/auth/logout` | any role | End the session |
 | GET | `/api/auth/me` | any role | Current user |
 | GET | `/api/documents` | any role | List documents. Filters: `source_category`, `status`, `q` (title search), `mine=1`. Paginated with `page` and `per_page`. |
-| POST | `/api/documents` | Planner, Admin | Multipart upload with `file`, `source_category` and an optional `title`. The file is validated, stored and parsed immediately. |
+| POST | `/api/documents` | Planner, Admin | Multipart upload with `file` (PDF, DOCX, TXT or CSV), `source_category` and an optional `title`. The file is validated, stored and parsed immediately. |
 | GET | `/api/documents/{id}` | any role | Document metadata, processing status and parse error |
 | GET | `/api/documents/{id}/text` | any role | Extracted text. `?view=clean` applies the noise cleanup. |
 | DELETE | `/api/documents/{id}` | owner or Admin | Delete a document and its file. Not allowed while a processing session uses it. |
 | GET | `/api/sessions` | any role | List sessions. Filters: `status`, `mine=1`. |
-| POST | `/api/sessions` | Planner, Admin | `{session_name, document_ids, parameter_config?}`: up to 50 documents, all of which must be parsed |
+| GET | `/api/sessions/defaults` | any role | The parameters a new session gets by default (including the Admin's NLP defaults) |
+| POST | `/api/sessions` | Planner, Admin | `{session_name, document_ids, parameter_config?}`: up to 50 documents, all of which must be parsed. `parameter_config` holds the threshold, weights, `max_recommendations` and `topic_count`. |
 | GET | `/api/sessions/{id}` | any role | Session detail, including `document_ids` in processing order |
 | DELETE | `/api/sessions/{id}` | owner or Admin | Delete a session. Not allowed while it is processing. |
 | POST | `/api/sessions/{id}/run` | owner or Admin | Queue the NLP pipeline and return **202** at once. Allowed only from `Pending` or `Failed`, and only when the library has at least one parsed NUC Core Reference document (otherwise `409 NO_CORE_REFERENCE`). |
 | GET | `/api/sessions/{id}/results` | any role | All NLP output: pipeline info, corpus results and per-document results |
 | GET | `/api/sessions/{id}/keywords` | any role | TF-IDF keywords for the corpus and for each document |
-| GET | `/api/sessions/{id}/entities` | any role | Skill demand and per-document entities. `?label=SKILL\|TOOL\|CERT\|ORG\|PRODUCT\|GPE` filters by type. |
+| GET | `/api/sessions/{id}/entities` | any role | Skill demand and per-document entities. `?label=TECHNOLOGY\|SKILL\|METHODOLOGY\|ORG\|PRODUCT\|GPE` filters by type. |
 | GET | `/api/sessions/{id}/topics` | any role | BERTopic topics (label, keywords, size, relevance, representative passages) and each document's topic shares |
-| GET | `/api/sessions/{id}/recommendations` | any role | Ranked recommendations. Filters: `overlap_status`, `decision` (`Accepted`, `Rejected`, `Flagged` or `pending`), `include_evidence=1`. |
+| GET | `/api/sessions/{id}/recommendations` | any role | Ranked recommendations. Filters: `overlap_status`, `decision` (`Accepted`, `Rejected` or `pending`), `include_evidence=1`. |
 | GET | `/api/sessions/{id}/similarity` | any role | Overlap results: threshold, core documents used, and each recommendation's closest core segments |
 | GET | `/api/recommendations/{id}` | any role | One recommendation with its evidence (source topic, passages, documents, skills, core matches) |
-| PATCH | `/api/recommendations/{id}/decision` | session owner or Admin | `{decision: Accepted\|Rejected\|Flagged\|null, notes?}`. Accepting a potential duplicate requires notes. |
+| PATCH | `/api/recommendations/{id}/decision` | session owner or Admin | `{decision: Accepted\|Rejected\|null, notes?}`; `null` undoes a decision. Accepting a potential duplicate requires notes. |
 | PATCH | `/api/recommendations/{id}` | session owner or Admin | Rename a recommendation or edit its description |
-| GET/POST | `/api/recommendations/{id}/mapping` | read: any role; create: owner or Admin | Proposed courses for an **Accepted** recommendation: `{course_code, course_title, credit_units: 1-3, prerequisites[], learning_outcomes[]}` |
-| GET/PUT/DELETE | `/api/mappings/{id}` | read: any role; change: owner or Admin | Read, update or delete one mapping. Course codes are normalised (`csc413` becomes `CSC 413`) and must be unique within a session. |
+| GET/POST | `/api/recommendations/{id}/mapping` | read: any role; create: owner or Admin | The proposed course for an **Accepted** recommendation (one per recommendation; a second POST returns `409 MAPPING_EXISTS`): `{course_code, course_title, credit_units: 1-3, prerequisites[], learning_outcomes[]}` |
+| GET/PUT/DELETE | `/api/mappings/{id}` | read: any role; change: owner or Admin | Read, update or delete one mapping. Course codes are normalised (`csc413` becomes `CSC 413`, `uuy-csc411` becomes `UUY-CSC 411`) and must be unique within a session. |
 | GET | `/api/sessions/{id}/mappings` | any role | Every course mapping in a session |
 | POST | `/api/sessions/{id}/reports` | Planner, Admin | `{format: "pdf"\|"docx"}`. Generates and stores a report and returns 201. |
 | GET | `/api/reports`, `/api/reports/{id}` | any role | Report history (`?session_id=` filter) and metadata |
@@ -130,6 +131,7 @@ All errors use the same shape:
 | GET | `/api/dashboard/summary` | any role | Counts, recent sessions, the current user's pending reviews, and whether a core reference exists |
 | GET/POST | `/api/admin/users` | Admin | List or create users |
 | PATCH | `/api/admin/users/{id}` | Admin | Change role, active status, email or password. Admins cannot demote or deactivate themselves. |
+| GET/PUT | `/api/admin/settings/nlp-defaults` | Admin | System-wide defaults for new sessions: threshold, weights, recommendations shown, topic count |
 | GET | `/api/admin/audit` | Admin | Audit log. Filters: `user_id`, `action_type`, `entity_type`, `from`, `to`. |
 
 While a run is in progress, `GET /api/sessions/{id}` returns
@@ -139,25 +141,25 @@ scoring → saving. Results
 endpoints return `409 RESULTS_NOT_READY` until the session is `Completed`.
 
 Uploads are checked for extension *and* file content (a renamed `.exe` is
-rejected), a 25 MB limit, and exact duplicates (SHA-256). Only Admins can
+rejected), a 20 MB limit, and exact duplicates (SHA-256). Only Admins can
 upload or delete **NUC Core Reference** documents.
 
 Roles: **Admin** (full access), **Curriculum Planner** (upload, run, review,
-map, report), **Viewer** (read-only). Roles are enforced on the server with
+map, report; every session is readable, only your own is editable). Roles are enforced on the server with
 `app.utils.rbac.roles_required`.
 
 ## Document processing
 
 | Stage | Module | What it does |
 |-------|--------|--------------|
-| Parse | `services/ingestion/parsers.py` | PDF (PyMuPDF): extracts text page by page, drops running headers, footers and page numbers, and re-joins words hyphenated across line breaks. DOCX (python-docx): extracts body paragraphs and tables in reading order, skipping headers and footers. TXT: decodes UTF-8, falling back to cp1252. |
+| Parse | `services/ingestion/parsers.py` | PDF (PyMuPDF): extracts text page by page, drops running headers, footers and page numbers, and re-joins words hyphenated across line breaks. DOCX (python-docx): extracts body paragraphs and tables in reading order, skipping headers and footers. TXT: decodes UTF-8, falling back to cp1252. CSV: detects the delimiter; when it finds course code, title and description columns it emits one `CODE: Title. Description` line per row, otherwise it joins each row's cells. |
 | Clean | `services/preprocessing/normalize.py` | NFKC normalisation, standardised quotes and dashes, and removal of invisible characters, URLs, emails, table-of-contents entries (with or without page numbers) and lines with no letters |
 | Preprocess | `services/preprocessing/pipeline.py` | spaCy `en_core_web_sm` produces normalised sentences (used for SBERT and NER) and lowercased content-word lemmas with stop words removed (used for TF-IDF) |
 | TF-IDF | `services/tfidf/` | scikit-learn keywords (unigrams and bigrams, sublinear TF) for each document and for the corpus. Terms found in more than 90% of documents are dropped when there are 5 or more documents. |
-| NER | `services/ner/` | spaCy NER plus an EntityRuler with about 250 curated Computing patterns labelled `SKILL`, `TOOL` or `CERT` (`patterns.py`). Also keeps the standard `ORG`, `PRODUCT` and `GPE` labels. Skill demand counts total mentions and how many documents mention each skill. |
+| NER | `services/ner/` | spaCy NER plus an EntityRuler with about 250 curated Computing patterns labelled `TECHNOLOGY`, `SKILL` or `METHODOLOGY` as in spec v2 (`patterns.py`; certifications count as `SKILL`). Also keeps the standard `ORG`, `PRODUCT` and `GPE` labels. Skill demand counts total mentions and how many documents mention each skill. |
 | Embeddings | `services/embeddings/` | SBERT `all-MiniLM-L6-v2`. `EMBEDDING_BACKEND=hashing` is a deterministic lexical stand-in for tests and offline development only. |
-| Topics | `services/topics/` | BERTopic (UMAP → HDBSCAN → BM25 c-TF-IDF) over sentence-level passages, using our own embeddings. Each topic has a label, keywords, size, a 0–1 relevance score, the 3 passages closest to its centroid, document and source-category counts, and a centroid embedding. |
-| Orchestration | `services/analysis.py`, `tasks/` | Celery task that runs the stages, records progress and timings, and saves the output. Any failure marks the session `Failed` with the error message and writes an audit entry. |
+| Topics | `services/topics/` | BERTopic (UMAP → HDBSCAN → BM25 c-TF-IDF) over sentence-level passages, using our own embeddings, reduced to at most the session's `topic_count` (default 10). Each topic has a label, keywords, size, a 0–1 relevance score, a c-TF-IDF score, the 3 passages closest to its centroid, document and source-category counts, and a centroid embedding. |
+| Orchestration | `services/analysis.py`, `tasks/` | Celery task that runs the stages, records progress and timings, and saves the output. Runs are limited to 15 minutes (`PIPELINE_SOFT_TIME_LIMIT`). Any failure marks the session `Failed` with the error message and writes an audit entry. |
 
 NUC Core Reference documents in a session are processed, but kept out of skill
 demand, corpus keywords and topics. They are the baseline for overlap
@@ -173,22 +175,23 @@ mentioned in those passages.
    document in the library is split into segments (course titles, outlines,
    sentences) and embedded, with a cache per worker process. For each
    candidate, `max_similarity` is its highest cosine similarity to any core
-   segment and `novelty = 1 − max_similarity`. Above the session threshold
-   (default 0.80) the candidate is marked **Potential Duplicate**, and its 3
+   segment and `novelty = 1 − max_similarity`. At or above the session
+   threshold (default 0.80) the candidate is marked **Potential Duplicate**, and its 3
    closest core segments are kept as evidence.
 2. **Scores** (`services/recommendations/`), each normalised to 0–1 across the
    session's candidates:
-   - `ner_score = log(1+m) / log(1+max m)`, where *m* is the number of
-     SKILL/TOOL/CERT mentions in the candidate's passages
-   - `topic_score` = the average of the candidate's passage share and
-     document spread, each relative to the session's largest
+   - `ner_score = m / max m`, where *m* is the number of
+     TECHNOLOGY/SKILL/METHODOLOGY mentions in the candidate's passages
+   - `topic_score = ctfidf / max ctfidf`, the topic's c-TF-IDF keyword
+     score relative to the session's highest
    - `novelty_score` = 1 − max similarity
 3. **Composite** `= 0.40·NER + 0.35·Topic + 0.25·Novelty` (the weights come
    from the session's `parameter_config`).
-4. **Ranking:** novel candidates come first by composite score, then potential
-   duplicates. The list is capped at `max_recommendations` (default 20).
+4. **Ranking:** by composite score; the top `max_recommendations` (default
+   20) are kept. Potential duplicates keep their place and carry a *Flagged*
+   badge; accepting one needs a justification.
 5. **Title:** the dominant skill's name (found in at least 20% of the topic's
-   passages; skills before tools), for example "Cloud Computing and
+   passages; skills before technologies and methodologies), for example "Cloud Computing and
    Kubernetes". If there is none, the topic label is used.
 
 Scanned (image-only) PDFs are marked `Failed` with a clear reason. OCR is out
@@ -199,8 +202,8 @@ of scope.
 Vue 3 single-page app (`frontend/`) with every route in spec §13: login,
 dashboard, document library, sessions, session detail with live progress,
 evidence dashboard (skills, keywords, themes, overlap), recommendation cards
-with accept/reject/flag, recommendation detail, curriculum mapping, reports,
-user management and the audit log. Controls are hidden for roles that can't
+with score-breakdown bars, Clear/Flagged overlap badges and accept/reject/undo, recommendation detail, curriculum mapping, reports,
+and the Admin pages (users, core curriculum, NLP defaults, audit log). Documents are uploaded by drag and drop, several at a time, with progress. Controls are hidden for roles that can't
 use them, but the API enforces every rule regardless.
 
 ```bash
@@ -215,8 +218,8 @@ npm run build        # production bundle in dist/
 
 `frontend/tests/e2e/workflow.spec.js` drives the whole workflow in Chromium,
 as §22 requires: the admin uploads the core reference; a planner uploads,
-analyses, reviews, maps and downloads a report; a viewer is read-only; the
-admin manages users and reads the audit log. It needs the API, a worker and
+analyses, reviews, maps and downloads a report; a second planner can read but not review; the
+admin sets the NLP defaults, manages users and reads the audit log. It needs the API, a worker and
 `vite preview` running against a disposable database:
 
 ```bash

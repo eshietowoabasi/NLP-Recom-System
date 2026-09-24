@@ -6,7 +6,7 @@ from flask_login import current_user
 from ..models import Role
 from .errors import ApiError
 
-# Roles allowed to modify data; Viewer is read-only.
+# Every role may modify data (spec v2: Curriculum Planner and Administrator).
 WRITE_ROLES = (Role.ADMIN, Role.PLANNER)
 
 

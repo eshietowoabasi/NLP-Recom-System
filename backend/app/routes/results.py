@@ -4,13 +4,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload, undefer
 
 from ..extensions import db
-from ..models import AnalysisSession, DocumentSession, NLPResult, SessionStatus
+from ..models import AnalysisSession, DocumentSession, SessionStatus
 from ..utils.errors import ConflictError, NotFoundError, ValidationError
 from ..utils.rbac import login_required
 
 bp = Blueprint("results", __name__)
 
-ENTITY_LABELS = {"SKILL", "TOOL", "CERT", "ORG", "PRODUCT", "GPE"}
+ENTITY_LABELS = {"TECHNOLOGY", "SKILL", "METHODOLOGY", "ORG", "PRODUCT", "GPE"}
 
 
 def _completed_session(session_id):

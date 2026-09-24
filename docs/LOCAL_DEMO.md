@@ -60,19 +60,27 @@ Go to **http://localhost:8080** and sign in with the Admin account.
 
 Then, in this order:
 
-1. **Documents:** upload the **NUC CCMAS core curriculum** with the source
-   category **NUC Core Reference**. Only Admins can do this, and analyses need
-   it for overlap detection.
-2. **Users:** create a *Curriculum Planner* account (and a *Viewer* if you want
-   to show read-only access).
-3. Sign out, sign in as the planner, and upload source documents: job adverts,
-   policy documents and so on, as PDF, DOCX or TXT.
-4. **Sessions:** create a session, tick the documents and click **Run
-   analysis**. The page shows each stage. 20 documents take about a minute; the
-   very first run after a start takes about 30 seconds longer while the models
-   load.
-5. Review the recommendations, accept some, map one to a course, and download
-   the PDF report.
+1. **Admin → Core curriculum:** upload the **NUC CCMAS core curriculum** (PDF,
+   DOCX, TXT, or a CSV course list with code, title and description columns).
+   Only Admins can do this, and analyses need it for overlap detection. From
+   the command line instead:
+   `docker compose exec backend flask seed-core /data/raw/ccmas.csv` (copy the
+   file into the container first with `docker compose cp`).
+2. **Admin → NLP defaults** (optional): change the default overlap threshold,
+   weights, number of recommendations or topic count for new sessions.
+3. **Admin → Users:** create a *Curriculum Planner* account (create two if you
+   want to show that planners can read each other's sessions but not change
+   them).
+4. Sign out, sign in as the planner, and drag source documents onto the
+   **Documents** page: job adverts, policy documents and so on, as PDF, DOCX,
+   TXT or CSV, up to 20 MB each.
+5. **Sessions:** create a session, tick the documents and click **Run
+   analysis**. The page shows each stage and opens the recommendations when the
+   run finishes. 20 documents take about a minute; the very first run after a
+   start takes about 30 seconds longer while the models load.
+6. Review the recommendations (each card shows its score breakdown and a
+   Clear/Flagged overlap badge), accept or reject some (Undo reverses a
+   decision), map one to a course, and download the PDF report.
 
 ## Everyday commands
 

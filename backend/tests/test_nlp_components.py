@@ -44,13 +44,14 @@ class TestNer:
     @pytest.mark.parametrize(
         "text, expected",
         [
-            ("C++ and C# developers wanted", {("C++", "TOOL"), ("C#", "TOOL")}),
-            ("We use Node.js, Vue.js and .NET Core", {("Node.js", "TOOL"), ("Vue.js", "TOOL"), (".NET", "TOOL")}),
-            ("Build CI/CD pipelines", {("CI/CD", "SKILL")}),
-            ("AWS Certified Solutions Architect preferred", {("AWS Certified", "CERT")}),
-            ("CompTIA Security+ holder", {("CompTIA Security+", "CERT")}),
-            ("Power BI, TensorFlow/PyTorch", {("Power BI", "TOOL"), ("TensorFlow", "TOOL"), ("PyTorch", "TOOL")}),
-            ("Experience with Go programming and R language", {("Go", "TOOL"), ("R", "TOOL")}),
+            ("C++ and C# developers wanted", {("C++", "TECHNOLOGY"), ("C#", "TECHNOLOGY")}),
+            ("We use Node.js, Vue.js and .NET Core", {("Node.js", "TECHNOLOGY"), ("Vue.js", "TECHNOLOGY"), (".NET", "TECHNOLOGY")}),
+            ("Build CI/CD pipelines", {("CI/CD", "METHODOLOGY")}),
+            ("AWS Certified Solutions Architect preferred", {("AWS Certified", "SKILL")}),
+            ("CompTIA Security+ holder", {("CompTIA Security+", "SKILL")}),
+            ("Power BI, TensorFlow/PyTorch", {("Power BI", "TECHNOLOGY"), ("TensorFlow", "TECHNOLOGY"), ("PyTorch", "TECHNOLOGY")}),
+            ("Experience with Go programming and R language", {("Go", "TECHNOLOGY"), ("R", "TECHNOLOGY")}),
+            ("Agile and Scrum teams practising TDD", {("Agile Methods", "METHODOLOGY"), ("Test-Driven Development", "METHODOLOGY")}),
             ("Machine learning and Deep Learning", {("Machine Learning", "SKILL"), ("Deep Learning", "SKILL")}),
         ],
     )
@@ -68,9 +69,9 @@ class TestNer:
     def test_counts_and_standard_entities(self):
         result = extract_entities(["Python and python again.", "Jobs in Lagos use Python."])
         by_name = {(e["text"], e["label"]): e["count"] for e in result.entities}
-        assert by_name[("Python", "TOOL")] == 2  # "python" lowercase is not the language
+        assert by_name[("Python", "TECHNOLOGY")] == 2  # "python" lowercase is not the language
         assert ("Lagos", "GPE") in by_name
-        assert result.entities[0]["label"] in ("SKILL", "TOOL", "CERT")
+        assert result.entities[0]["label"] in ("TECHNOLOGY", "SKILL", "METHODOLOGY")
 
     def test_skill_demand_aggregation(self):
         per_doc = {
@@ -80,7 +81,7 @@ class TestNer:
         demand = {r["text"]: r for r in aggregate_skill_demand(per_doc)}
         assert demand["Python"]["mentions"] == 3 and demand["Python"]["document_frequency"] == 2
         assert demand["Python"]["document_ids"] == [1, 2]
-        assert "Lagos" not in demand  # only SKILL/TOOL/CERT count as demand
+        assert "Lagos" not in demand  # only TECHNOLOGY/SKILL/METHODOLOGY count as demand
         assert list(demand)[0] == "Python"  # ranked by document frequency
 
 
@@ -215,3 +216,15 @@ def test_duplicate_passages_counted_but_fitted_once():
     # All 60 copies share one topic assignment (or are all outliers).
     counted = sum(t["size"] for t in result.topics) + result.outlier_count
     assert counted == len(passages)
+
+
+
+def test_spec_worked_example_entities():
+    """Spec v2 §6 worked example: expected TECHNOLOGY / METHODOLOGY / SKILL entities."""
+    text = ("We are seeking a Junior Software Developer proficient in Python, REST API design, and relational "
+            "database management (PostgreSQL preferred). Familiarity with version control (Git), Agile development "
+            "practices, and basic cloud deployment (AWS or Azure) is required.")
+    found = {(e["text"], e["label"]) for e in extract_entities([text]).custom()}
+    assert {("Python", "TECHNOLOGY"), ("PostgreSQL", "TECHNOLOGY"), ("Git", "TECHNOLOGY"), ("AWS", "TECHNOLOGY"),
+            ("Microsoft Azure", "TECHNOLOGY"), ("Agile Methods", "METHODOLOGY"),
+            ("API Development", "SKILL"), ("Cloud Computing", "SKILL")} <= found

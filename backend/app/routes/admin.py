@@ -54,7 +54,7 @@ def create_user():
     if not EMAIL_RE.match(email):
         errors["email"] = "Invalid email address"
     _validate_password(payload.get("password"), errors)
-    role = Role.VIEWER
+    role = Role.PLANNER
     if "role" in payload:
         try:
             role = Role(payload["role"])
@@ -142,3 +142,26 @@ def audit_log():
         return {**entry.to_dict(), "username": usernames.get(entry.user_id)}
 
     return jsonify(paginate(query, serialize, default_per_page=50))
+
+
+@bp.get("/settings/nlp-defaults")
+@roles_required(Role.ADMIN)
+def get_nlp_defaults_route():
+    from ..services.settings import get_nlp_defaults
+
+    return jsonify({"success": True, "parameter_config": get_nlp_defaults()})
+
+
+@bp.put("/settings/nlp-defaults")
+@roles_required(Role.ADMIN)
+def put_nlp_defaults_route():
+    """System-wide NLP parameter defaults for new sessions (spec v2 §1)."""
+    from ..services.settings import set_nlp_defaults
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ValidationError("Request body must be a JSON object of parameters")
+    config = set_nlp_defaults(payload, current_user.user_id)
+    record_audit("SETTINGS_UPDATE", "SystemSetting", None, {"nlp_defaults": config}, commit=False)
+    db.session.commit()
+    return jsonify({"success": True, "parameter_config": config})

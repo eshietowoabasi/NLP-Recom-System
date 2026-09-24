@@ -3,7 +3,7 @@
 Input: JSON Lines, one advert per line:
 
     {"id": "ad-001", "text": "...",
-     "annotator_a": [{"start": 10, "end": 20, "label": "TOOL"}, ...],
+     "annotator_a": [{"start": 10, "end": 20, "label": "TECHNOLOGY"}, ...],
      "annotator_b": [...],
      "gold": [...]}                      # adjudicated labels (optional)
 
@@ -12,7 +12,7 @@ record, names ({text, label}); names are compared per advert (document level).
 Without "gold", annotator A's labels are used and a warning is reported.
 """
 from ..services.ner import CUSTOM_LABELS, entity_spans
-from .metrics import cohen_kappa, match_mentions, match_spans, prf
+from .metrics import cohen_kappa, match_spans, prf
 
 TARGETS = {"precision": 0.80, "recall": 0.75, "f1": 0.75}  # spec §17.1
 

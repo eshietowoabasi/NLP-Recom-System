@@ -1,10 +1,7 @@
 """Document management (spec §4, §7): upload, validate, categorise, store, list, delete."""
-from pathlib import Path
-
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 from flask_login import current_user
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import undefer
 
 from ..extensions import db
@@ -17,14 +14,8 @@ from ..models import (
     SessionStatus,
     SourceCategory,
 )
-from ..services.ingestion import (
-    ParseError,
-    content_hash,
-    delete_file,
-    parse_document,
-    save_bytes,
-    validate_upload,
-)
+from ..services.ingestion import delete_file
+from ..services.ingestion.library import add_document
 from ..services.preprocessing import clean_blocks
 from ..utils.audit import record_audit
 from ..utils.errors import ApiError, ConflictError, NotFoundError, ValidationError
@@ -83,71 +74,7 @@ def upload_document():
     if category in ADMIN_ONLY_CATEGORIES and current_user.role is not Role.ADMIN:
         raise ApiError("Only Admins can upload NUC Core Reference documents", code="FORBIDDEN", status_code=403)
 
-    original_filename = Path(upload.filename).name[:255]
-    title = (request.form.get("title") or Path(original_filename).stem).strip()[:255]
-    if not title:
-        raise ValidationError("title is required", details={"title": "Required"})
-
-    data = upload.read()
-    file_type = validate_upload(original_filename, data, current_app.config["MAX_DOCUMENT_BYTES"])
-
-    digest = content_hash(data)
-    existing = db.session.execute(select(Document).filter_by(content_hash=digest)).scalar_one_or_none()
-    if existing is not None:
-        raise ConflictError(
-            "This file has already been uploaded",
-            code="DUPLICATE_DOCUMENT",
-            details={"document_id": existing.document_id, "title": existing.title},
-        )
-
-    path = save_bytes(data, current_app.config["UPLOAD_FOLDER"], file_type.value)
-    document = Document(
-        user_id=current_user.user_id,
-        title=title,
-        file_path=path,
-        file_type=file_type,
-        source_category=category,
-        original_filename=original_filename,
-        file_size=len(data),
-        content_hash=digest,
-    )
-
-    # Parse immediately so broken files are reported at upload time, not mid-analysis.
-    try:
-        parsed = parse_document(data, file_type)
-    except ParseError as exc:
-        document.processing_status = DocumentStatus.FAILED
-        document.error_message = str(exc)
-    except Exception:
-        current_app.logger.exception("Unexpected parser failure for %s", original_filename)
-        document.processing_status = DocumentStatus.FAILED
-        document.error_message = "Unexpected error while extracting text"
-    else:
-        document.processing_status = DocumentStatus.PARSED
-        document.extracted_text = parsed.text
-        document.word_count = parsed.word_count
-        document.page_count = parsed.page_count
-
-    db.session.add(document)
-    try:
-        db.session.flush()
-        record_audit(
-            "DOCUMENT_UPLOAD",
-            "Document",
-            document.document_id,
-            {"title": title, "source_category": category.value, "status": document.processing_status.value},
-            commit=False,
-        )
-        db.session.commit()
-    except IntegrityError:
-        # Lost a race with a concurrent upload of the same file.
-        db.session.rollback()
-        delete_file(path)
-        raise ConflictError("This file has already been uploaded", code="DUPLICATE_DOCUMENT")
-    except Exception:
-        db.session.rollback()
-        delete_file(path)
-        raise
+    document = add_document(upload.read(), upload.filename, category, current_user.user_id, request.form.get("title"))
     return jsonify({"success": True, "document": document.to_dict()}), 201
 
 

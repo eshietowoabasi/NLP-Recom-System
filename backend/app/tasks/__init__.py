@@ -13,6 +13,8 @@ def init_celery(app):
 
     celery = Celery(app.name, task_cls=FlaskTask)
     celery.config_from_object(app.config["CELERY"])
+    soft = app.config["PIPELINE_SOFT_TIME_LIMIT"]
+    celery.conf.task_annotations = {"analysis.run": {"soft_time_limit": soft, "time_limit": soft + 60}}
     celery.set_default()
     app.extensions["celery"] = celery
     return celery

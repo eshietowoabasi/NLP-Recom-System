@@ -50,7 +50,8 @@ def get_mapping_or_404(map_id):
 @login_required
 def list_for_recommendation(rec_id):
     rec = get_recommendation_or_404(rec_id)
-    return jsonify({"success": True, "items": [_map_dict(m) for m in rec.curriculum_maps]})
+    items = [_map_dict(rec.curriculum_map)] if rec.curriculum_map else []
+    return jsonify({"success": True, "items": items})
 
 
 @rec_bp.post("/<int:rec_id>/mapping")
@@ -60,6 +61,13 @@ def create_mapping(rec_id):
     ensure_can_review(rec.session)
     if rec.planner_decision is not PlannerDecision.ACCEPTED:
         raise ConflictError("Only accepted recommendations can be mapped to a course", code="NOT_ACCEPTED")
+    if rec.curriculum_map is not None:
+        # Spec v2 §4: one mapping per recommendation; edit it with PUT /api/mappings/{id}.
+        raise ConflictError(
+            "This recommendation is already mapped to a course",
+            code="MAPPING_EXISTS",
+            details={"map_id": rec.curriculum_map.map_id},
+        )
     data = validate_mapping(request.get_json(silent=True))
     _check_code_free(rec.session_id, data["course_code"])
     mapping = CurriculumMap(rec_id=rec.rec_id, **data)

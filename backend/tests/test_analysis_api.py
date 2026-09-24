@@ -57,8 +57,9 @@ def test_run_pipeline_end_to_end(client, db, job_session):
     demand = {e["text"]: e for e in entities["skill_demand"]}
     assert {"Kubernetes", "Penetration Testing", "CISSP", "Machine Learning"} <= set(demand)
     assert demand["Kubernetes"]["document_ids"] == [doc_ids[0]]
-    certs = client.get(f"/api/sessions/{session_id}/entities?label=CERT").json["skill_demand"]
-    assert certs and all(e["label"] == "CERT" for e in certs)
+    methods = client.get(f"/api/sessions/{session_id}/entities?label=METHODOLOGY").json["skill_demand"]
+    assert methods and all(e["label"] == "METHODOLOGY" for e in methods)
+    assert demand["CISSP"]["label"] == "SKILL" and demand["Kubernetes"]["label"] == "TECHNOLOGY"
     assert client.get(f"/api/sessions/{session_id}/entities?label=FOO").status_code == 422
 
     topics = client.get(f"/api/sessions/{session_id}/topics").json
@@ -161,10 +162,7 @@ def test_reference_only_session_fails_with_reason(client, make_user, login, core
 def test_permissions(client, job_session, make_user, login):
     session_id, _ = job_session
     client.post("/api/auth/logout")
-    make_user("viewer", role=Role.VIEWER)
-    login("viewer")
-    assert client.post(f"/api/sessions/{session_id}/run").status_code == 403
-    client.post("/api/auth/logout")
+    assert client.post(f"/api/sessions/{session_id}/run").status_code == 401
     make_user("other", role=Role.PLANNER)
     login("other")
     assert client.post(f"/api/sessions/{session_id}/run").status_code == 403

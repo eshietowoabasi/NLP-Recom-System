@@ -33,6 +33,26 @@ class TestSegmentation:
         assert all(len(s.split()) <= 60 for s in segments[1:])
         assert len(segments) > 3
 
+    def test_flattened_course_table_split_into_rows(self):
+        # A CCMAS course-structure table as the PDF parser returns it: one run-on block.
+        table = ("Course Code Course Title Units Status LH PH COS 101 Introduction to Computing Sciences 3 C 30 45 "
+                 "CSC 201 Programming in C 3 C 30 45 CSC 202 Data Structures 3 E 45 - "
+                 "CSC 301 Operating Systems 2 C 30 45")
+        assert segment_core_text(table) == [
+            "COS 101 Introduction to Computing Sciences", "CSC 201 Programming in C",
+            "CSC 202 Data Structures", "CSC 301 Operating Systems",
+        ]
+
+    def test_prose_mentioning_courses_is_not_a_table(self):
+        prose = ("Students must pass CSC 201 before registering for the advanced courses in the third year, "
+                 "and CSC 301 builds directly on the programming skills and the laboratory work of "
+                 "CSC 202 together with the mathematics of MTH 201 taught by the department of mathematics.")
+        assert segment_core_text(prose) == [prose]
+
+    def test_unpunctuated_runs_are_cut_by_words(self):
+        segments = segment_core_text(" ".join(f"word{i}" for i in range(150)))
+        assert [len(s.split()) for s in segments] == [60, 60, 30]
+
     def test_repeated_segments_removed(self):
         assert segment_core_text("Data structures and algorithms\n\nData structures and algorithms") == [
             "Data structures and algorithms"
@@ -56,13 +76,14 @@ class TestOverlap:
         assert different.status is OverlapStatus.NO_SIGNIFICANT_OVERLAP and different.novelty > 0.9
         assert same.matches[0]["document_id"] == 1
 
-    def test_threshold_is_strictly_greater_than(self):
+    def test_threshold_is_inclusive(self):
+        """Spec v2 §5: flagged when max similarity >= threshold (float32 noise ignored)."""
         index = build_core_index([], HashingEmbedder())
         index.segments = [type("S", (), {"text": "x", "document_id": 1})()]
         index.vectors = np.array([[1.0, 0.0]], dtype=np.float32)
         at = np.array([[0.8, 0.6]], dtype=np.float32)  # cosine exactly 0.80
-        assert detect_overlap(at, index, 0.80)[0].status is OverlapStatus.NO_SIGNIFICANT_OVERLAP
-        assert detect_overlap(at, index, 0.79)[0].status is OverlapStatus.POTENTIAL_DUPLICATE
+        assert detect_overlap(at, index, 0.80)[0].status is OverlapStatus.POTENTIAL_DUPLICATE
+        assert detect_overlap(at, index, 0.81)[0].status is OverlapStatus.NO_SIGNIFICANT_OVERLAP
 
     def test_top_matches_sorted_and_negative_similarity_floored(self):
         index = build_core_index([], HashingEmbedder())
@@ -108,19 +129,25 @@ def make_candidate(topic_id, passages=10, docs=(1,), mentions=None, label="Cloud
 
 
 def overlap(similarity, threshold=0.8):
-    status = OverlapStatus.POTENTIAL_DUPLICATE if similarity > threshold else OverlapStatus.NO_SIGNIFICANT_OVERLAP
+    status = OverlapStatus.POTENTIAL_DUPLICATE if similarity >= threshold else OverlapStatus.NO_SIGNIFICANT_OVERLAP
     return OverlapResult(similarity, round(1 - similarity, 4), status, [])
 
 
 class TestScores:
-    def test_ner_scores_log_normalised(self):
-        assert ner_scores([0, 9, 99]) == [0.0, round(np.log(10) / np.log(100), 4), 1.0]
+    def test_ner_scores_count_over_max(self):
+        """Spec v2 §6: N_c = count(entities_c) / max count across candidates."""
+        assert ner_scores([0, 9, 99]) == [0.0, round(9 / 99, 4), 1.0]
         assert ner_scores([0, 0]) == [0.0, 0.0] and ner_scores([]) == []
 
-    def test_topic_scores_combine_size_and_spread(self):
-        # Same size: a theme found in 4 documents beats one found in a single document.
-        assert topic_scores([10, 10], [4, 1]) == [1.0, 0.625]
-        assert topic_scores([20, 10], [2, 2]) == [1.0, 0.75]
+    def test_topic_scores_ctfidf_over_max(self):
+        """Spec v2 §6: B_c = topic c-TF-IDF score normalised across candidates."""
+        assert topic_scores([2.0, 1.0, 0.5]) == [1.0, 0.5, 0.25]
+        assert topic_scores([0.0, 0.0]) == [0.0, 0.0] and topic_scores([]) == []
+
+    def test_spec_worked_example(self):
+        """Spec v2 §6 worked example: 0.40(0.85) + 0.35(0.72) + 0.25(0.66).
+        = 0.34 + 0.252 + 0.165 = 0.757 (the specification text states 0.78 in error)."""
+        assert composite_score(0.85, 0.72, 0.66, DEFAULT_CONFIG) == 0.757
 
     def test_composite_uses_configured_weights(self):
         assert composite_score(1.0, 0.0, 0.0, DEFAULT_CONFIG) == 0.4
@@ -128,9 +155,9 @@ class TestScores:
         assert composite_score(0.5, 0.5, 0.5, {"ner_weight": 0.2, "topic_weight": 0.2, "novelty_weight": 0.6}) == 0.5
 
     def test_title_prefers_dominant_skills(self):
-        cand = make_candidate(0, passages=10, mentions={("Cloud Computing", "SKILL"): 6, ("Kubernetes", "TOOL"): 8, ("Excel", "TOOL"): 1})
-        assert candidate_title(cand) == "Cloud Computing and Kubernetes"  # skills first, then tools
-        assert candidate_title(make_candidate(1, mentions={("Excel", "TOOL"): 1})) == "Cloud, Kubernetes, Docker"
+        cand = make_candidate(0, passages=10, mentions={("Cloud Computing", "SKILL"): 6, ("Kubernetes", "TECHNOLOGY"): 8, ("Excel", "TECHNOLOGY"): 1})
+        assert candidate_title(cand) == "Cloud Computing and Kubernetes"  # skills first, then technologies
+        assert candidate_title(make_candidate(1, mentions={("Excel", "TECHNOLOGY"): 1})) == "Cloud, Kubernetes, Docker"
 
     def test_score_candidates_fills_fields_and_deduplicates_titles(self):
         cands = [
@@ -143,13 +170,14 @@ class TestScores:
         assert cands[0].novelty_score == 0.9 and cands[0].composite_score > cands[1].composite_score
         assert "Most demanded skills and tools: DevOps" in cands[0].description
 
-    def test_rank_puts_duplicates_last_and_limits(self):
+    def test_rank_by_composite_and_limit(self):
+        """Spec v2 §6: ranked descending by S_c, top N kept; overlap does not reorder."""
         cands = [make_candidate(i) for i in range(4)]
         for cand, (score, dup) in zip(cands, [(0.9, True), (0.5, False), (0.7, False), (0.95, True)]):
             cand.composite_score = score
             cand.overlap_status = OverlapStatus.POTENTIAL_DUPLICATE if dup else OverlapStatus.NO_SIGNIFICANT_OVERLAP
-        assert [c.topic_id for c in rank_candidates(cands, 10)] == [2, 1, 3, 0]
-        assert [c.topic_id for c in rank_candidates(cands, 3)] == [2, 1, 3]
+        assert [c.topic_id for c in rank_candidates(cands, 10)] == [3, 0, 2, 1]
+        assert [c.topic_id for c in rank_candidates(cands, 3)] == [3, 0, 2]
 
 
 # --- API --------------------------------------------------------------------
@@ -163,11 +191,8 @@ def test_recommendations_ranked_with_evidence(client, completed_session, core_do
         assert r["composite_score"] == pytest.approx(0.4 * r["ner_score"] + 0.35 * r["topic_score"] + 0.25 * r["novelty_score"], abs=2e-4)
         assert "evidence" not in r
 
-    statuses = [r["overlap_status"] for r in items]
-    first_dup = statuses.index("Potential Duplicate") if "Potential Duplicate" in statuses else len(statuses)
-    assert "No Significant Overlap" not in statuses[first_dup:]  # novel topics first
+    assert items == sorted(items, key=lambda r: -r["composite_score"])  # spec v2 §6: ranked by S_c
     novel = [r for r in items if r["overlap_status"] == "No Significant Overlap"]
-    assert novel == sorted(novel, key=lambda r: -r["composite_score"])
 
     # The core covers security, so security topics are flagged; cloud ones are novel.
     duplicates = [r for r in items if r["overlap_status"] == "Potential Duplicate"]
@@ -210,8 +235,8 @@ def test_planner_decisions(client, db, completed_session):
     resp = client.patch(f"/api/recommendations/{dup['rec_id']}/decision",
                         json={"decision": "Accepted", "notes": "Core covers basics; we add applied SOC practice."})
     assert resp.status_code == 200
-    assert client.patch(f"/api/recommendations/{dup['rec_id']}/decision", json={"decision": "Flagged"}).status_code == 200
-    # Clearing the decision keeps notes unless they are replaced.
+    assert client.patch(f"/api/recommendations/{dup['rec_id']}/decision", json={"decision": "Rejected"}).status_code == 200
+    # Undo (spec v2 §8): back to pending; notes are kept unless replaced.
     cleared = client.patch(f"/api/recommendations/{dup['rec_id']}/decision", json={"decision": None}).json["recommendation"]
     assert cleared["planner_decision"] is None and cleared["planner_notes"].startswith("Core covers")
 
@@ -220,7 +245,7 @@ def test_planner_decisions(client, db, completed_session):
     accepted = client.get(f"/api/sessions/{completed_session}/recommendations?decision=Accepted").json["items"]
     assert [r["rec_id"] for r in accepted] == [novel["rec_id"]]
 
-    for body in ({}, {"decision": "Maybe"}, {"decision": "Rejected", "notes": 5}):
+    for body in ({}, {"decision": "Maybe"}, {"decision": "Flagged"}, {"decision": "Rejected", "notes": 5}):
         assert client.patch(f"/api/recommendations/{novel['rec_id']}/decision", json=body).status_code == 422
     assert db.session.query(AuditLog).filter_by(action_type="RECOMMENDATION_DECISION").count() == 4
 
@@ -228,7 +253,7 @@ def test_planner_decisions(client, db, completed_session):
 def test_decision_permissions(client, completed_session, make_user, login):
     rec_id = client.get(f"/api/sessions/{completed_session}/recommendations").json["items"][0]["rec_id"]
     body = {"decision": "Rejected"}
-    for username, role, expected in (("viewer", Role.VIEWER, 403), ("other", Role.PLANNER, 403), ("boss", Role.ADMIN, 200)):
+    for username, role, expected in (("other", Role.PLANNER, 403), ("boss", Role.ADMIN, 200)):
         client.post("/api/auth/logout")
         make_user(username, role=role)
         login(username)

@@ -84,10 +84,8 @@ class TestUpload:
         resp = upload(client, JOB_AD.encode(), "a.txt", category="Social Media")
         assert resp.status_code == 422 and "source_category" in resp.json["error"]["details"]
 
-    def test_viewer_cannot_upload(self, client, make_user, login):
-        make_user("viewer", role=Role.VIEWER)
-        login("viewer")
-        assert upload(client, JOB_AD.encode(), "a.txt").status_code == 403
+    def test_signed_out_cannot_upload(self, client):
+        assert upload(client, JOB_AD.encode(), "a.txt").status_code == 401
 
     def test_only_admin_uploads_nuc_core(self, client, planner, make_user, login):
         assert upload(client, JOB_AD.encode(), "core.txt", category="NUC Core Reference").status_code == 403
@@ -135,11 +133,11 @@ class TestReadAndDelete:
     def test_missing_document_404(self, client, planner):
         assert client.get("/api/documents/999").status_code == 404
 
-    def test_viewer_can_read(self, client, planner, make_user, login):
+    def test_other_planners_can_read(self, client, planner, make_user, login):
         upload(client, JOB_AD.encode(), "a.txt")
         client.post("/api/auth/logout")
-        make_user("viewer", role=Role.VIEWER)
-        login("viewer")
+        make_user("colleague", role=Role.PLANNER)
+        login("colleague")
         assert client.get("/api/documents").json["pagination"]["total"] == 1
 
     def test_delete_removes_row_and_file(self, client, planner, db):

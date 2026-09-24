@@ -168,7 +168,63 @@ def parse_pdf(data: bytes) -> ParsedDocument:
     return parsed
 
 
-PARSERS = {FileType.PDF: parse_pdf, FileType.DOCX: parse_docx, FileType.TXT: parse_txt}
+# --- CSV --------------------------------------------------------------------
+
+# Column names recognised in course lists (e.g. the NUC core curriculum, spec v2 §9).
+_CODE_COLUMNS = ("course_code", "code", "course code", "course_id")
+_TITLE_COLUMNS = ("course_title", "title", "course title", "course_name", "name")
+_TEXT_COLUMNS = ("description", "course_description", "content", "outline", "course_content",
+                 "synopsis", "learning_outcomes", "text", "body")
+
+
+def _find_column(header, names):
+    lookup = {h.strip().lower().replace("-", "_"): i for i, h in enumerate(header)}
+    for name in names:
+        if name.replace("-", "_") in lookup:
+            return lookup[name.replace("-", "_")]
+    return None
+
+
+def parse_csv(data: bytes) -> ParsedDocument:
+    """One block per row. Course lists become "CODE: Title. Description" so each course
+    is its own segment for overlap detection; other CSVs keep all non-empty cells."""
+    import csv
+    import io
+
+    text = decode_text(data)
+    sample = text[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    rows = [r for r in csv.reader(io.StringIO(text), dialect) if any(c.strip() for c in r)]
+    if not rows:
+        return ParsedDocument(blocks=[])
+
+    header = rows[0]
+    code_i, title_i = _find_column(header, _CODE_COLUMNS), _find_column(header, _TITLE_COLUMNS)
+    text_cols = [i for i, h in enumerate(header) if h.strip().lower().replace("-", "_") in _TEXT_COLUMNS]
+    has_header = code_i is not None or title_i is not None or bool(text_cols)
+    body = rows[1:] if has_header else rows
+
+    blocks = []
+    for row in body:
+        cell = lambda i: row[i].strip() if i is not None and i < len(row) else ""  # noqa: E731
+        if has_header and (code_i is not None or title_i is not None):
+            head = ": ".join(p for p in (cell(code_i), cell(title_i)) if p)
+            details = " ".join(cell(i) for i in text_cols if cell(i))
+            block = f"{head}. {details}" if head and details else head or details
+        elif has_header:
+            block = " ".join(cell(i) for i in text_cols if cell(i))
+        else:
+            block = " | ".join(c.strip() for c in row if c.strip())
+        block = _clean_block(block)
+        if block:
+            blocks.append(block)
+    return ParsedDocument(blocks=blocks)
+
+
+PARSERS = {FileType.PDF: parse_pdf, FileType.DOCX: parse_docx, FileType.TXT: parse_txt, FileType.CSV: parse_csv}
 
 
 def parse_document(data: bytes, file_type: FileType) -> ParsedDocument:

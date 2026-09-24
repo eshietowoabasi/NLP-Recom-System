@@ -52,6 +52,35 @@ export const api = {
   upload: (url, form) => request('POST', url, { form }),
 }
 
+/**
+ * Multipart upload with progress (fetch cannot report upload progress).
+ * onProgress receives a fraction 0..1. Resolves with the parsed JSON body.
+ */
+export function uploadWithProgress(url, form, onProgress = () => {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `/api${url}`)
+    xhr.withCredentials = true
+    xhr.setRequestHeader('Accept', 'application/json')
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
+    xhr.onerror = () => reject(new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server. Check your connection and try again.'))
+    xhr.onload = () => {
+      let data = null
+      try {
+        data = JSON.parse(xhr.responseText)
+      } catch {
+        /* non-JSON error page, e.g. from the proxy */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(data)
+      const error = data?.error || {}
+      if (xhr.status === 401 && unauthorizedHandler) unauthorizedHandler()
+      const message = xhr.status === 413 ? 'The file is larger than the 20 MB limit.' : error.message || xhr.statusText
+      reject(new ApiError(xhr.status, error.code || 'HTTP_ERROR', message, error.details || {}))
+    }
+    xhr.send(form)
+  })
+}
+
 /** Human-readable message, including per-field details when present. */
 export function describeError(error) {
   if (!(error instanceof ApiError)) return 'Something went wrong.'

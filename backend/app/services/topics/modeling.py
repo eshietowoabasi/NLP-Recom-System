@@ -93,7 +93,7 @@ def _vectorizer(max_df=1.0):
     )
 
 
-def _build_model(n_passages: int):
+def _build_model(n_passages: int, nr_topics: int | None = None):
     from bertopic import BERTopic
     from bertopic.vectorizers import ClassTfidfTransformer
     from hdbscan import HDBSCAN
@@ -122,6 +122,9 @@ def _build_model(n_passages: int):
         vectorizer_model=_vectorizer(),
         ctfidf_model=ClassTfidfTransformer(bm25_weighting=True, reduce_frequent_words=True),
         top_n_words=TOPIC_KEYWORDS,
+        # Spec v2 §4: session topic_count (default 10). BERTopic merges the most similar
+        # clusters down to this number; if fewer clusters are found, none are merged.
+        nr_topics=nr_topics,
         calculate_probabilities=False,
         verbose=False,
     )
@@ -142,7 +145,7 @@ def _deduplicate(passages: list[Passage]):
     return unique, np.array([position[m] for m in mapping])
 
 
-def model_topics(passages: list[Passage], embeddings: np.ndarray) -> TopicModelResult:
+def model_topics(passages: list[Passage], embeddings: np.ndarray, nr_topics: int | None = None) -> TopicModelResult:
     n = len(passages)
     unique, to_unique = _deduplicate(passages) if passages else ([], np.array([], dtype=int))
     if len(unique) < MIN_PASSAGES:
@@ -155,7 +158,7 @@ def model_topics(passages: list[Passage], embeddings: np.ndarray) -> TopicModelR
     # Fit on distinct passages, then give every passage its text's topic so sizes and
     # per-document counts still reflect how often something is said.
     texts = [passages[i].text for i in unique]
-    model = _build_model(len(unique))
+    model = _build_model(len(unique), nr_topics)
     unique_assignments, _ = model.fit_transform(texts, embeddings=embeddings[unique])
     unique_assignments = np.asarray(unique_assignments)
     assignments = unique_assignments[to_unique]
@@ -194,6 +197,9 @@ def model_topics(passages: list[Passage], embeddings: np.ndarray) -> TopicModelR
             "topic_id": int(t),
             "label": make_label([w for w, _ in words], forms=forms),
             "keywords": [{"term": w, "score": round(float(s), 4)} for w, s in words],
+            # Topic-level c-TF-IDF strength (sum of the top keyword weights): the basis of
+            # the BERTopic relevance score B_c (spec v2 §6).
+            "ctfidf_score": round(float(sum(s for _, s in words)), 6),
             "size": sizes[t],
             "distinct_passages": int(len(distinct)),
             # Prevalence normalised to 0-1 against the largest topic (spec §8.6).

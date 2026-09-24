@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import ErrorAlert from '../components/ErrorAlert.vue'
-import StatusBadge from '../components/StatusBadge.vue'
+import OverlapBadge from '../components/OverlapBadge.vue'
 import { api } from '../services/api'
 import { score } from '../utils/format'
 
@@ -46,10 +46,10 @@ onMounted(() => show('skills'))
     <div class="d-flex gap-2 mb-3 small align-items-center">
       <span>Show:</span>
       <select v-model="labelFilter" class="form-select form-select-sm w-auto" aria-label="Entity type">
-        <option value="">Skills, tools and certifications</option>
-        <option value="SKILL">Skills</option>
-        <option value="TOOL">Tools</option>
-        <option value="CERT">Certifications</option>
+        <option value="">Technologies, skills and methodologies</option>
+        <option value="TECHNOLOGY">Technologies</option>
+        <option value="SKILL">Skills (incl. certifications)</option>
+        <option value="METHODOLOGY">Methodologies</option>
       </select>
     </div>
     <table class="table table-sm">
@@ -102,14 +102,14 @@ onMounted(() => show('skills'))
   </div>
 
   <div v-if="tab === 'similarity' && data.similarity" class="card card-body">
-    <p class="small">Threshold: similarity above <strong>{{ data.similarity.similarity_threshold }}</strong> is a potential duplicate of the NUC core ({{ data.similarity.core_segment_count }} core segments compared).</p>
+    <p class="small">Threshold: similarity of <strong>{{ data.similarity.similarity_threshold }}</strong> or more is flagged as a possible duplicate of the NUC core ({{ data.similarity.core_segment_count }} core segments compared).</p>
     <table class="table table-sm">
       <thead><tr><th>Recommendation</th><th>Max similarity</th><th>Status</th><th>Closest NUC core content</th></tr></thead>
       <tbody>
         <tr v-for="item in data.similarity.items" :key="item.rec_id">
           <td><RouterLink :to="`/recommendations/${item.rec_id}`">{{ item.topic_title }}</RouterLink></td>
           <td>{{ score(item.max_similarity) }}</td>
-          <td><StatusBadge :status="item.overlap_status" /></td>
+          <td><OverlapBadge :status="item.overlap_status" :similarity="item.max_similarity" :threshold="data.similarity.similarity_threshold" /></td>
           <td class="small">{{ item.core_matches[0]?.text }}</td>
         </tr>
       </tbody>

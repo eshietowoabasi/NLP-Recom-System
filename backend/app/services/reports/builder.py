@@ -50,7 +50,7 @@ def build_report(session_id: int, author, institution: str) -> ReportContent:
     ).scalars().all()
     recs = db.session.execute(
         select(Recommendation).where(Recommendation.session_id == session_id)
-        .order_by(Recommendation.rank).options(undefer(Recommendation.evidence), selectinload(Recommendation.curriculum_maps))
+        .order_by(Recommendation.rank).options(undefer(Recommendation.evidence), selectinload(Recommendation.curriculum_map))
     ).scalars().all()
     core_docs = {
         d.document_id: d.title
@@ -64,7 +64,7 @@ def build_report(session_id: int, author, institution: str) -> ReportContent:
 
     # 1. Summary
     decisions = Counter(r.planner_decision.value if r.planner_decision else "Pending review" for r in recs)
-    mappings = [m for r in recs for m in r.curriculum_maps]
+    mappings = [r.curriculum_map for r in recs if r.curriculum_map]
     add(Block("heading", "1. Summary"))
     add(Block("paragraph",
               f"This report presents {len(recs)} ranked recommendations for the NUC CCMAS 30% localised "
@@ -155,7 +155,7 @@ def build_report(session_id: int, author, institution: str) -> ReportContent:
     if not mappings:
         add(Block("paragraph", "No accepted recommendation has been mapped to a course yet."))
     for r in recs:
-        for m in r.curriculum_maps:
+        for m in [r.curriculum_map] if r.curriculum_map else []:
             add(Block("subheading", f"{m.course_code}: {m.course_title} ({m.credit_units} unit{'s' if m.credit_units > 1 else ''})"))
             add(Block("paragraph", f"Derived from recommendation #{r.rank}: {r.topic_title}. "
                                    f"Prerequisites: {', '.join(m.prerequisites or []) or 'none'}."))

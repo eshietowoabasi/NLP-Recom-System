@@ -95,13 +95,13 @@ def get_recommendation(rec_id):
 @bp.patch("/<int:rec_id>/decision")
 @roles_required(*WRITE_ROLES)
 def decide(rec_id):
-    """Accept, reject or flag a recommendation, or send null to clear the decision."""
+    """Accept or reject a recommendation, or send null to undo (back to pending)."""
     rec = get_recommendation_or_404(rec_id)
     ensure_can_review(rec.session)
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or "decision" not in payload:
-        raise ValidationError("decision is required", details={"decision": "Accepted, Rejected, Flagged or null"})
+        raise ValidationError("decision is required", details={"decision": "Accepted, Rejected or null (pending)"})
     decision = None if payload["decision"] is None else parse_enum(PlannerDecision, payload["decision"], "decision")
 
     notes = payload.get("notes", rec.planner_notes)
@@ -118,11 +118,11 @@ def decide(rec_id):
             details={"notes": "Required when accepting a Potential Duplicate"},
         )
 
-    if rec.curriculum_maps and decision is not PlannerDecision.ACCEPTED:
+    if rec.curriculum_map and decision is not PlannerDecision.ACCEPTED:
         raise ConflictError(
             "This recommendation is mapped to a course; delete the mapping before changing the decision",
             code="MAPPING_EXISTS",
-            details={"map_ids": [m.map_id for m in rec.curriculum_maps]},
+            details={"map_id": rec.curriculum_map.map_id},
         )
 
     previous = rec.planner_decision.value if rec.planner_decision else None

@@ -95,13 +95,10 @@ def test_mapping_permissions(client, completed_session, make_user, login):
     rec_id = accepted_rec(client, completed_session)
     map_id = client.post(f"/api/recommendations/{rec_id}/mapping", json=MAPPING).json["mapping"]["map_id"]
     client.post("/api/auth/logout")
-    make_user("viewer", role=Role.VIEWER)
-    login("viewer")
-    assert client.get(f"/api/mappings/{map_id}").status_code == 200
-    assert client.put(f"/api/mappings/{map_id}", json=MAPPING).status_code == 403
-    client.post("/api/auth/logout")
     make_user("other", role=Role.PLANNER)
     login("other")
+    assert client.get(f"/api/mappings/{map_id}").status_code == 200  # colleagues can read
+    assert client.put(f"/api/mappings/{map_id}", json=MAPPING).status_code == 403
     assert client.delete(f"/api/mappings/{map_id}").status_code == 403
 
 
@@ -156,9 +153,7 @@ def test_report_errors(client, completed_session, make_user, login):
     assert client.post(f"/api/sessions/{completed_session}/reports", json={"format": "html"}).status_code == 422
     assert client.get("/api/reports/999").status_code == 404
     client.post("/api/auth/logout")
-    make_user("viewer", role=Role.VIEWER)
-    login("viewer")
-    assert client.post(f"/api/sessions/{completed_session}/reports", json={"format": "pdf"}).status_code == 403
+    assert client.post(f"/api/sessions/{completed_session}/reports", json={"format": "pdf"}).status_code == 401
 
 
 def test_missing_report_file_returns_404(client, db, completed_session):
@@ -201,12 +196,13 @@ def test_admin_user_management(client, admin, login):
     assert bad.status_code == 422 and set(bad.json["error"]["details"]) == {"username", "email", "password", "role"}
 
     assert client.get("/api/admin/users?q=ad").json["pagination"]["total"] == 2
-    assert client.patch(f"/api/admin/users/{user_id}", json={"role": "Viewer", "is_active": False}).json["user"]["role"] == "Viewer"
+    assert client.patch(f"/api/admin/users/{user_id}", json={"role": "Admin", "is_active": False}).json["user"]["role"] == "Admin"
+    assert client.patch(f"/api/admin/users/{user_id}", json={"role": "Viewer"}).status_code == 422  # role removed (spec v2)
     assert client.patch(f"/api/admin/users/{user_id}", json={}).status_code == 422
     assert client.patch(f"/api/admin/users/{user_id}", json={"password": "new-password", "is_active": True}).status_code == 200
 
     # Admins cannot lock themselves out.
-    assert client.patch(f"/api/admin/users/{admin.user_id}", json={"role": "Viewer"}).status_code == 422
+    assert client.patch(f"/api/admin/users/{admin.user_id}", json={"role": "Curriculum Planner"}).status_code == 422
     assert client.patch(f"/api/admin/users/{admin.user_id}", json={"is_active": False}).status_code == 422
     assert client.get("/api/auth/me").json["user"]["role"] == "Admin"
 

@@ -8,8 +8,9 @@ summary and writes full results as JSON under `reports/evaluation/`.
 | Evaluation | Spec | Command | Input |
 |---|---|---|---|
 | NER precision / recall / F1 and inter-annotator agreement | §17.1 | `flask eval ner FILE.jsonl [--mode strict\|lenient\|document]` | 50 annotated job adverts |
-| BERTopic vs LDA (C_v coherence, topic diversity) | §8.5, §17.2 | `flask eval topics --input-dir DIR` or `--session-id N` | The analysis corpus |
-| Semantic overlap AUC-ROC, recommended threshold | §17.3 | `flask eval similarity FILE.csv [--threshold 0.80]` | 30 expert-labelled topic pairs |
+| BERTopic vs LDA (C_v coherence ≥ 0.50, topic diversity) | §8.5, §17.2 | `flask eval topics --input-dir DIR` or `--session-id N` | The analysis corpus |
+| Semantic overlap AUC-ROC ≥ 0.80, recommended threshold | §17.3 | `flask eval similarity FILE.csv [--threshold 0.80]` | 30 expert-labelled topic pairs |
+| Recommendation coverage (accepted ÷ reviewed ≥ 0.85) | spec v2 | `flask eval coverage --session-id N` (repeatable) | Planner decisions in completed sessions |
 | System Usability Scale | §17.4 | `flask eval sus FILE.csv` | UAT questionnaires (5–10 participants) |
 | Pipeline performance | §17.5 | `flask eval performance [--input-dir DIR]` | Synthetic 20 × 3,000 words, or real documents |
 
@@ -21,15 +22,16 @@ describe the real system, and the commands print a warning.
 
 ```json
 {"id": "ad-001", "text": "…advert text…",
- "annotator_a": [{"start": 10, "end": 16, "label": "TOOL"}],
- "annotator_b": [{"start": 10, "end": 16, "label": "TOOL"}],
- "gold":        [{"start": 10, "end": 16, "label": "TOOL"}]}
+ "annotator_a": [{"start": 10, "end": 16, "label": "TECHNOLOGY"}],
+ "annotator_b": [{"start": 10, "end": 16, "label": "TECHNOLOGY"}],
+ "gold":        [{"start": 10, "end": 16, "label": "TECHNOLOGY"}]}
 ```
 
-- Labels: `SKILL` (knowledge areas and practices), `TOOL` (languages,
-  frameworks, platforms) and `CERT` (certifications).
+- Labels (spec v2): `TECHNOLOGY` (languages, frameworks, platforms, tools),
+  `SKILL` (knowledge areas and competencies, including certifications) and
+  `METHODOLOGY` (Agile, DevOps, CI/CD, TDD and similar practices).
 - `start` and `end` are character offsets, with `end` exclusive. If offsets are
-  impractical to record, use `{"text": "Kubernetes", "label": "TOOL"}` and run
+  impractical to record, use `{"text": "Kubernetes", "label": "TECHNOLOGY"}` and run
   with `--mode document`.
 - `gold` is the adjudicated set after the two annotators resolve their
   disagreements. Where it's missing, annotator A's labels are used and a
