@@ -20,6 +20,11 @@ MIN_SEGMENT_WORDS = 3     # keeps course titles such as "Cloud Computing Systems
 MAX_SEGMENT_WORDS = 60    # longer blocks are split into sentence windows
 TOP_MATCHES = 3
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?;])\s+")
+# A course code at the start of a table row, e.g. "CSC 301" or "COS 101".
+_COURSE_CODE_RE = re.compile(r"\b[A-Z]{3,4} ?\d{3}[A-Z]?\b")
+MIN_TABLE_ROWS = 3
+# Trailing table columns after a course title: units, status (C/E/R), lecture/practical hours.
+_ROW_TAIL_RE = re.compile(r"\s+\d{1,2}(?:\s+(?:\d{1,3}|[CER]|-))*\s*$")
 _CACHE_SIZE = 32
 
 
@@ -47,23 +52,52 @@ class OverlapResult:
     matches: list[dict]  # [{"text", "document_id", "similarity"}], best first
 
 
+def _table_rows(block: str) -> list[str] | None:
+    """Split a course-structure table flattened into one block ("Course Code Course Title
+    Units ... CSC 101 Introduction to Computing 3 C 30 45 CSC 102 ...") into one
+    "CSC 101 Introduction to Computing" segment per course. None if it is not a table."""
+    starts = [m.start() for m in _COURSE_CODE_RE.finditer(block)]
+    if len(starts) < MIN_TABLE_ROWS:
+        return None
+    rows = [block[a:b].strip() for a, b in zip(starts, starts[1:] + [len(block)])]
+    # Table rows are short and end in their numeric columns (units, hours); prose that
+    # merely mentions several course codes does neither.
+    tabular = sum(len(r.split()) <= 15 and _ROW_TAIL_RE.search(r) is not None for r in rows)
+    if tabular < max(MIN_TABLE_ROWS, 0.7 * len(rows)):
+        return None
+    return [_ROW_TAIL_RE.sub("", row) for row in rows]
+
+
+def _windows(block: str) -> list[str]:
+    """Sentence windows of at most MAX_SEGMENT_WORDS; unpunctuated runs are cut by words."""
+    pieces = []
+    for sentence in _SENTENCE_END_RE.split(block):
+        words = sentence.split()
+        pieces.extend(" ".join(words[i:i + MAX_SEGMENT_WORDS]) for i in range(0, len(words), MAX_SEGMENT_WORDS))
+    windows, window = [], []
+    for piece in pieces:
+        if window and len(" ".join(window + [piece]).split()) > MAX_SEGMENT_WORDS:
+            windows.append(" ".join(window))
+            window = []
+        window.append(piece)
+    if window:
+        windows.append(" ".join(window))
+    return windows
+
+
 def segment_core_text(text: str) -> list[str]:
     segments = []
     for block in clean_blocks(split_blocks(text)):
         words = block.split()
         if len(words) < MIN_SEGMENT_WORDS:
             continue
-        if len(words) <= MAX_SEGMENT_WORDS:
+        rows = _table_rows(block)
+        if rows is not None:
+            segments.extend(rows)
+        elif len(words) <= MAX_SEGMENT_WORDS:
             segments.append(block)
-            continue
-        window = []
-        for sentence in _SENTENCE_END_RE.split(block):
-            if window and len(" ".join(window + [sentence]).split()) > MAX_SEGMENT_WORDS:
-                segments.append(" ".join(window))
-                window = []
-            window.append(sentence)
-        if window:
-            segments.append(" ".join(window))
+        else:
+            segments.extend(_windows(block))
     # Preserve order, drop exact repeats (running headers that survived cleanup etc.).
     return list(dict.fromkeys(s for s in segments if len(s.split()) >= MIN_SEGMENT_WORDS))
 

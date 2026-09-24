@@ -33,6 +33,26 @@ class TestSegmentation:
         assert all(len(s.split()) <= 60 for s in segments[1:])
         assert len(segments) > 3
 
+    def test_flattened_course_table_split_into_rows(self):
+        # A CCMAS course-structure table as the PDF parser returns it: one run-on block.
+        table = ("Course Code Course Title Units Status LH PH COS 101 Introduction to Computing Sciences 3 C 30 45 "
+                 "CSC 201 Programming in C 3 C 30 45 CSC 202 Data Structures 3 E 45 - "
+                 "CSC 301 Operating Systems 2 C 30 45")
+        assert segment_core_text(table) == [
+            "COS 101 Introduction to Computing Sciences", "CSC 201 Programming in C",
+            "CSC 202 Data Structures", "CSC 301 Operating Systems",
+        ]
+
+    def test_prose_mentioning_courses_is_not_a_table(self):
+        prose = ("Students must pass CSC 201 before registering for the advanced courses in the third year, "
+                 "and CSC 301 builds directly on the programming skills and the laboratory work of "
+                 "CSC 202 together with the mathematics of MTH 201 taught by the department of mathematics.")
+        assert segment_core_text(prose) == [prose]
+
+    def test_unpunctuated_runs_are_cut_by_words(self):
+        segments = segment_core_text(" ".join(f"word{i}" for i in range(150)))
+        assert [len(s.split()) for s in segments] == [60, 60, 30]
+
     def test_repeated_segments_removed(self):
         assert segment_core_text("Data structures and algorithms\n\nData structures and algorithms") == [
             "Data structures and algorithms"
