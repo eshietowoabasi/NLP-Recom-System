@@ -23,6 +23,7 @@ services:
 
   backend:
     build: ./backend
+    image: nlp-rs-backend:latest  # one image shared by backend, worker and scheduler
     environment: &backend-env
       APP_CONFIG: ${APP_CONFIG:-development}
       SECRET_KEY: ${SECRET_KEY:-dev-insecure-key}
@@ -42,6 +43,7 @@ services:
   # Runs the NLP pipeline (spec §15). Scale with `docker compose up --scale worker=2`.
   worker:
     build: ./backend
+    image: nlp-rs-backend:latest  # one image shared by backend, worker and scheduler
     command: ["celery", "-A", "celery_worker.celery", "worker", "--loglevel=info", "--concurrency=1"]
     environment: *backend-env
     volumes:
@@ -55,6 +57,7 @@ services:
   # Periodic jobs (celery beat): marks runs whose worker died as Failed (spec §15).
   scheduler:
     build: ./backend
+    image: nlp-rs-backend:latest  # one image shared by backend, worker and scheduler
     command: ["celery", "-A", "celery_worker.celery", "beat", "--loglevel=info", "--schedule", "/tmp/celerybeat-schedule"]
     environment: *backend-env
     depends_on:
