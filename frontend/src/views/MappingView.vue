@@ -12,18 +12,23 @@ const error = ref(null)
 const saved = ref('')
 const form = reactive({ course_code: '', course_title: '', credit_units: 3, prerequisites: [], learning_outcomes: [''] })
 
-function fill(m) {
+function fill(m, title = rec.value?.topic_title) {
   Object.assign(form, m
     ? { course_code: m.course_code, course_title: m.course_title, credit_units: m.credit_units,
         prerequisites: [...m.prerequisites], learning_outcomes: m.learning_outcomes.length ? [...m.learning_outcomes] : [''] }
-    : { course_code: '', course_title: rec.value?.topic_title || '', credit_units: 3, prerequisites: [], learning_outcomes: [''] })
+    : { course_code: '', course_title: title || '', credit_units: 3, prerequisites: [], learning_outcomes: [''] })
 }
 
 async function load() {
   try {
-    rec.value = (await api.get(`/recommendations/${props.id}`)).recommendation
-    mapping.value = (await api.get(`/recommendations/${props.id}/mapping`)).items[0] || null
-    fill(mapping.value)
+    const [recResult, mapResult] = await Promise.all([
+      api.get(`/recommendations/${props.id}`),
+      api.get(`/recommendations/${props.id}/mapping`),
+    ])
+    // Fill the form before it is shown (v-if="rec"), so nothing typed can be overwritten.
+    mapping.value = mapResult.items[0] || null
+    fill(mapping.value, recResult.recommendation.topic_title)
+    rec.value = recResult.recommendation
   } catch (e) {
     error.value = e
   }
@@ -72,6 +77,7 @@ onMounted(load)
     <h1 class="h3 mb-3">Curriculum mapping</h1>
   </template>
   <ErrorAlert :error="error" />
+  <template v-if="rec">
   <div v-if="saved" class="alert alert-success py-2" data-test="mapping-saved">{{ saved }}</div>
   <form class="card card-body" style="max-width: 48rem" data-test="mapping-form" @submit.prevent="save">
     <h2 class="h6">{{ mapping ? `Edit ${mapping.course_code}` : 'Propose a course for this recommendation' }}</h2>
@@ -107,4 +113,5 @@ onMounted(load)
       <button v-if="mapping" type="button" class="btn btn-outline-danger" @click="remove">Remove mapping</button>
     </div>
   </form>
+  </template>
 </template>

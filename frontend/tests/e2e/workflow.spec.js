@@ -110,6 +110,12 @@ test('planner runs an analysis, reviews, maps and reports', async ({ page }) => 
   await clear.getByTestId('rec-title').click()
   await expect(page.getByTestId('rec-heading')).toBeVisible()
   await snap(page, '03-recommendation-detail')
+  // A slow mapping lookup must not wipe what the planner has already typed.
+  await page.route('**/api/recommendations/*/mapping', async (route) => {
+    if (route.request().method() === 'GET') await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.continue()
+  })
+  const mappingLookup = page.waitForResponse((r) => r.url().endsWith('/mapping') && r.request().method() === 'GET')
   await page.getByTestId('map-link').click()
   await page.getByLabel('Course code').fill('uuy-csc411')
   await page.getByLabel('Course title').fill('Cloud-Native Application Development with Python')
@@ -117,6 +123,8 @@ test('planner runs an analysis, reviews, maps and reports', async ({ page }) => 
   await page.getByLabel('Prerequisites (press Enter after each code)').fill('CSC 201')
   await page.getByLabel('Prerequisites (press Enter after each code)').press('Enter')
   await page.getByLabel('Learning outcome 1').fill('Deploy containerised services on a public cloud')
+  await mappingLookup
+  await expect(page.getByLabel('Course code')).toHaveValue('uuy-csc411')
   await page.getByRole('button', { name: 'Save course' }).click()
   await expect(page.getByTestId('mapping-saved')).toHaveText('Saved UUY-CSC 411.')
   await snap(page, '04-mapping')
