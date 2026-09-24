@@ -97,6 +97,7 @@ Then, in this order:
 | Symptom | Fix |
 |---|---|
 | `port is already allocated` for 8080 | Another program uses port 8080. In `docker-compose.yml`, change `"8080:80"` to `"8081:80"` and open http://localhost:8081 instead. |
+| The browser says "This site can't be reached" for localhost:8080 | The containers aren't running. Start **Docker Desktop** and wait until it says it's running, then run `docker compose up -d` in the project folder and check `docker compose ps`. If a container keeps restarting, run `docker compose logs --tail 50` and send the output. |
 | The page loads, but sign-in says the server can't be reached | The backend isn't ready yet: wait 20 seconds, or check `docker compose logs backend`. |
 | An error mentioning a missing table (`relation … does not exist`) | Step 4 (`flask db upgrade`) hasn't been run. |
 | An analysis stays on "Processing" or fails with "worker stopped responding" | Usually Docker has too little memory. Raise it in Settings → Resources, run `docker compose restart worker`, then click **Retry analysis**. |
