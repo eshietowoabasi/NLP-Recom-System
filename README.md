@@ -81,7 +81,8 @@ are flagged with a warning.
 ### Docker Compose (development)
 
 For production (HTTPS, required secrets, restart policies, backups) see
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). For a free public demo on Hugging Face see
+[docs/HOSTING.md](docs/HOSTING.md).
 
 
 ```bash

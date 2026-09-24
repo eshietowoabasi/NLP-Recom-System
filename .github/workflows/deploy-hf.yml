@@ -1,0 +1,35 @@
+name: Deploy to Hugging Face
+
+# Publishes the app to a Hugging Face Docker Space on every push to main (docs/HOSTING.md).
+# Runs only once the repository variable HF_SPACE (e.g. "yourname/nlp-rs") is set.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hf
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.HF_SPACE != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install huggingface_hub
+      - name: Stage the Space files
+        run: |
+          mkdir -p /tmp/space/deploy
+          tar --exclude=tests --exclude=node_modules --exclude=__pycache__ --exclude=dist --exclude=.env -cf - backend frontend | tar -xf - -C /tmp/space
+          cp -r deploy/huggingface /tmp/space/deploy/
+          cp deploy/huggingface/Dockerfile .dockerignore /tmp/space/
+          cp deploy/huggingface/SPACE_README.md /tmp/space/README.md
+      - name: Upload to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: python deploy/huggingface/upload.py /tmp/space

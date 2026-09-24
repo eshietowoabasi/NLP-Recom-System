@@ -1,0 +1,11 @@
+# Only used by builds whose context is the repository root (deploy/huggingface/Dockerfile).
+.git
+.venv
+**/node_modules
+**/__pycache__
+frontend/dist
+frontend/test-results
+data
+reports
+docs
+backend/tests
